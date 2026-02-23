@@ -5,6 +5,7 @@
 - VPS с Ubuntu 22.04+ (минимум 1 GB RAM, 20 GB SSD)
 - Домен, направленный на IP-адрес сервера (A-запись)
 - Docker и Docker Compose установлены
+- Nginx установлен на хосте
 
 ## Установка Docker (если не установлен)
 
@@ -23,6 +24,12 @@ exit
 # Проверить
 docker --version
 docker compose version
+```
+
+## Установка Nginx (если не установлен)
+
+```bash
+sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
 ## Пошаговый деплой
@@ -58,48 +65,45 @@ openssl rand -base64 48
 openssl rand -base64 24
 ```
 
-### 3. Настроить домен
-
-Заменить `YOUR_DOMAIN.COM` на ваш домен:
-
-```bash
-# nginx.conf (3 вхождения)
-sed -i 's/YOUR_DOMAIN.COM/your-domain.com/g' deploy/nginx.conf
-
-# init-letsencrypt.sh
-sed -i 's/YOUR_DOMAIN.COM/your-domain.com/g' deploy/init-letsencrypt.sh
-sed -i 's/YOUR_EMAIL@EXAMPLE.COM/your@email.com/g' deploy/init-letsencrypt.sh
-```
-
-### 4. Получить SSL-сертификат
-
-```bash
-chmod +x deploy/init-letsencrypt.sh
-sudo ./deploy/init-letsencrypt.sh
-```
-
-> **Совет:** для тестирования установите `STAGING=1` в скрипте, чтобы не упереться в лимиты Let's Encrypt.
-
-### 5. Запустить всё
+### 3. Запустить Docker (app + MySQL)
 
 ```bash
 docker compose up -d --build
 ```
 
-### 6. Проверить
-
+Проверить что контейнеры работают:
 ```bash
-# Статус контейнеров
 docker compose ps
-
-# Логи приложения
 docker compose logs -f app
-
-# Логи Nginx
-docker compose logs -f nginx
 ```
 
-Откройте `https://your-domain.com` в браузере.
+### 4. Настроить Nginx
+
+```bash
+# Скопировать конфиг
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/lkmarketing.online
+
+# Включить сайт
+sudo ln -s /etc/nginx/sites-available/lkmarketing.online /etc/nginx/sites-enabled/
+
+# Проверить конфигурацию
+sudo nginx -t
+
+# Перезагрузить
+sudo systemctl reload nginx
+```
+
+### 5. Получить SSL-сертификат
+
+```bash
+sudo certbot --nginx -d lkmarketing.online
+```
+
+Certbot автоматически обновит конфиг Nginx и настроит автопродление.
+
+### 6. Проверить
+
+Откройте `https://lkmarketing.online` в браузере.
 
 **Логин по умолчанию:** admin / admin123
 
@@ -108,7 +112,7 @@ docker compose logs -f nginx
 ## Полезные команды
 
 ```bash
-# Перезапуск
+# Перезапуск приложения
 docker compose restart
 
 # Обновление приложения
@@ -130,9 +134,14 @@ docker compose exec db mysqldump -u root -p dashboard > backup_$(date +%Y%m%d).s
 # Восстановление из бекапа
 docker compose exec -T db mysql -u root -p dashboard < backup.sql
 
-# Ручное обновление SSL-сертификата
-docker compose run --rm certbot renew
-docker compose exec nginx nginx -s reload
+# Статус Nginx
+sudo systemctl status nginx
+
+# Проверить SSL-сертификат
+sudo certbot certificates
+
+# Ручное обновление SSL
+sudo certbot renew
 ```
 
 ## Структура
@@ -140,14 +149,13 @@ docker compose exec nginx nginx -s reload
 ```
 .
 ├── Dockerfile              # Multi-stage сборка Next.js
-├── docker-compose.yml      # Оркестрация: app + db + nginx + certbot
+├── docker-compose.yml      # Оркестрация: app + db
 ├── .env.example            # Шаблон переменных окружения
 ├── .dockerignore           # Исключения из Docker-контекста
 ├── scripts/
 │   └── init-db.sql         # Инициализация БД (схема + сидовые данные)
 └── deploy/
-    ├── nginx.conf          # Конфигурация Nginx (reverse proxy + SSL)
-    ├── init-letsencrypt.sh # Скрипт получения SSL-сертификата
+    ├── nginx.conf          # Конфигурация для хостового Nginx
     └── README.md           # ← вы здесь
 ```
 
@@ -163,13 +171,14 @@ docker compose logs app
 ```bash
 # App ещё не готов — подождать 10-15 секунд
 docker compose ps
-# Если app unhealthy — смотреть логи
+# Если app не работает — смотреть логи
+docker compose logs app
 ```
 
 **Сертификат не получается:**
 ```bash
 # Проверить, что домен указывает на сервер
-dig +short your-domain.com
+dig +short lkmarketing.online
 # Должен вернуть IP сервера
 
 # Проверить, что порты 80/443 открыты
