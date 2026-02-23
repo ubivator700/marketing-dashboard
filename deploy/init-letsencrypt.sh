@@ -10,8 +10,8 @@
 set -e
 
 # --- Configuration ---
-DOMAIN="YOUR_DOMAIN.COM"
-EMAIL="YOUR_EMAIL@EXAMPLE.COM"    # Let's Encrypt notifications
+DOMAIN="lkmarketing.online"
+EMAIL="narodnielug@gmail.com"    # Let's Encrypt notifications
 STAGING=0                          # Set to 1 for testing (avoids rate limits)
 
 # --- Colors ---
@@ -24,7 +24,7 @@ echo -e "${GREEN}=== Marketing Dashboard — SSL Setup ===${NC}"
 echo ""
 
 # Check if domain is still placeholder
-if [ "$DOMAIN" = "YOUR_DOMAIN.COM" ]; then
+if [ "$DOMAIN" = "lkmarketing.online" ]; then
     echo -e "${RED}Error: Replace YOUR_DOMAIN.COM with your actual domain in this script${NC}"
     exit 1
 fi
