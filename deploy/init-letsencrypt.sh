@@ -40,18 +40,14 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-echo -e "${YELLOW}[1/4] Starting services (nginx will use self-signed cert) ...${NC}"
+echo -e "${YELLOW}[1/3] Starting services (nginx will use self-signed cert) ...${NC}"
 
-docker compose up -d nginx
+docker compose up -d
 
-echo -e "${YELLOW}[2/4] Removing self-signed certificate ...${NC}"
+# Wait for nginx to be ready
+sleep 5
 
-docker compose run --rm --entrypoint "\
-  rm -rf /etc/letsencrypt/live/$DOMAIN && \
-  rm -rf /etc/letsencrypt/archive/$DOMAIN && \
-  rm -rf /etc/letsencrypt/renewal/$DOMAIN.conf" certbot
-
-echo -e "${YELLOW}[3/4] Requesting Let's Encrypt certificate ...${NC}"
+echo -e "${YELLOW}[2/3] Requesting Let's Encrypt certificate ...${NC}"
 
 # Select staging or production server
 if [ $STAGING != "0" ]; then
@@ -61,17 +57,17 @@ else
     STAGING_ARG=""
 fi
 
-docker compose run --rm --entrypoint "\
-  certbot certonly --webroot -w /var/www/certbot \
+# Certbot writes real certs over the self-signed ones in the same volume
+docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
     $STAGING_ARG \
     --email $EMAIL \
     --domain $DOMAIN \
     --rsa-key-size 4096 \
     --agree-tos \
     --no-eff-email \
-    --force-renewal" certbot
+    --force-renewal
 
-echo -e "${YELLOW}[4/4] Reloading Nginx with real certificate ...${NC}"
+echo -e "${YELLOW}[3/3] Reloading Nginx with real certificate ...${NC}"
 
 docker compose exec nginx nginx -s reload
 
