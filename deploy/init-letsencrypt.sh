@@ -24,7 +24,7 @@ echo -e "${GREEN}=== Marketing Dashboard — SSL Setup ===${NC}"
 echo ""
 
 # Check if domain is still placeholder
-if [ "$DOMAIN" = "lkmarketing.online" ]; then
+if [ "$DOMAIN" = "YOUR_DOMAIN.COM" ]; then
     echo -e "${RED}Error: Replace YOUR_DOMAIN.COM with your actual domain in this script${NC}"
     exit 1
 fi
@@ -40,30 +40,18 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-echo -e "${YELLOW}[1/5] Creating dummy certificate for $DOMAIN ...${NC}"
-
-# Create required directories
-mkdir -p "./certbot/conf/live/$DOMAIN"
-
-# Generate dummy certificate so Nginx can start
-docker compose run --rm --entrypoint "\
-  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-    -keyout '/etc/letsencrypt/live/$DOMAIN/privkey.pem' \
-    -out '/etc/letsencrypt/live/$DOMAIN/fullchain.pem' \
-    -subj '/CN=localhost'" certbot
-
-echo -e "${YELLOW}[2/5] Starting Nginx ...${NC}"
+echo -e "${YELLOW}[1/4] Starting services (nginx will use self-signed cert) ...${NC}"
 
 docker compose up -d nginx
 
-echo -e "${YELLOW}[3/5] Removing dummy certificate ...${NC}"
+echo -e "${YELLOW}[2/4] Removing self-signed certificate ...${NC}"
 
 docker compose run --rm --entrypoint "\
   rm -rf /etc/letsencrypt/live/$DOMAIN && \
   rm -rf /etc/letsencrypt/archive/$DOMAIN && \
   rm -rf /etc/letsencrypt/renewal/$DOMAIN.conf" certbot
 
-echo -e "${YELLOW}[4/5] Requesting Let's Encrypt certificate ...${NC}"
+echo -e "${YELLOW}[3/4] Requesting Let's Encrypt certificate ...${NC}"
 
 # Select staging or production server
 if [ $STAGING != "0" ]; then
@@ -83,7 +71,7 @@ docker compose run --rm --entrypoint "\
     --no-eff-email \
     --force-renewal" certbot
 
-echo -e "${YELLOW}[5/5] Reloading Nginx with real certificate ...${NC}"
+echo -e "${YELLOW}[4/4] Reloading Nginx with real certificate ...${NC}"
 
 docker compose exec nginx nginx -s reload
 
