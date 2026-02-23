@@ -23,17 +23,6 @@ NC='\033[0m'
 echo -e "${GREEN}=== Marketing Dashboard — SSL Setup ===${NC}"
 echo ""
 
-# Check if domain is still placeholder
-if [ "$DOMAIN" = "YOUR_DOMAIN.COM" ]; then
-    echo -e "${RED}Error: Replace YOUR_DOMAIN.COM with your actual domain in this script${NC}"
-    exit 1
-fi
-
-if [ "$EMAIL" = "YOUR_EMAIL@EXAMPLE.COM" ]; then
-    echo -e "${RED}Error: Replace YOUR_EMAIL@EXAMPLE.COM with your actual email in this script${NC}"
-    exit 1
-fi
-
 # Check if docker compose is available
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}Error: Docker is not installed${NC}"
