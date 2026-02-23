@@ -1,0 +1,110 @@
+"use client";
+
+import type { Channel, Lead, Expense, ChannelTask } from "@/types/dashboard";
+import { channelGroupLabels, channelGroupColors } from "@/lib/channels-data";
+import { leadsByChannel, channelRevenue, channelRomi } from "@/lib/lead-utils";
+import { totalExpensesForChannel } from "@/lib/expense-utils";
+import ModalShell from "@/components/dashboard/modal-shell";
+import ChannelTaskList from "./channel-task-list";
+
+interface ChannelDetailModalProps {
+  channel: Channel;
+  leads: Lead[];
+  expenses: Expense[];
+  averageCheck: number;
+  onEdit: (channel: Channel) => void;
+  onDelete: (channelId: number) => void;
+  onToggleTask: (channelId: number, taskId: number) => void;
+  onAddTask: (channelId: number, task: ChannelTask) => void;
+  onDeleteTask: (channelId: number, taskId: number) => void;
+  onClose: () => void;
+}
+
+export default function ChannelDetailModal({
+  channel,
+  leads,
+  expenses,
+  averageCheck,
+  onEdit,
+  onDelete,
+  onToggleTask,
+  onAddTask,
+  onDeleteTask,
+  onClose,
+}: ChannelDetailModalProps) {
+  const chLeads = leadsByChannel(leads, channel.id);
+  const revenue = channelRevenue(leads, channel.id, averageCheck);
+  const chExpenses = totalExpensesForChannel(expenses, channel.id);
+  const romi = channelRomi(revenue, chExpenses);
+  const groupColor = channelGroupColors[channel.group];
+
+  return (
+    <ModalShell onClose={onClose} title={channel.name} maxWidth="max-w-lg">
+      {/* Group badge */}
+      <div className="mb-4">
+        <span
+          className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium text-white"
+          style={{ backgroundColor: groupColor }}
+        >
+          {channelGroupLabels[channel.group]}
+        </span>
+      </div>
+
+      {/* Metrics grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Лиды</p>
+          <p className="text-lg font-bold text-gray-900">{chLeads.length}</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Прибыль</p>
+          <p className="text-lg font-bold text-green-600">{revenue.toLocaleString("ru-RU")} ₽</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Расходы</p>
+          <p className="text-lg font-bold text-red-500">{chExpenses.toLocaleString("ru-RU")} ₽</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">ROMI</p>
+          <p className={`text-lg font-bold ${romi !== null && romi >= 0 ? "text-green-600" : "text-red-500"}`}>
+            {romi !== null ? `${romi}%` : "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Tasks */}
+      <div className="border-t border-gray-100 pt-4">
+        <ChannelTaskList
+          tasks={channel.tasks}
+          onToggle={(taskId) => onToggleTask(channel.id, taskId)}
+          onAdd={(task) => onAddTask(channel.id, task)}
+          onDelete={(taskId) => onDeleteTask(channel.id, taskId)}
+        />
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2 mt-6">
+        <button
+          onClick={() => onEdit(channel)}
+          className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+        >
+          Редактировать
+        </button>
+        <button
+          onClick={() => {
+            if (window.confirm("Удалить канал?")) onDelete(channel.id);
+          }}
+          className="px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors"
+        >
+          Удалить
+        </button>
+        <button
+          onClick={onClose}
+          className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+        >
+          Закрыть
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
