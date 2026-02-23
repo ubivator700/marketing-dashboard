@@ -43,8 +43,10 @@ export async function POST(request: NextRequest) {
 
     response.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
     return response;
-  } catch (err) {
-    console.error("Login error:", err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : "";
+    console.error("Login error:", message, stack);
     return NextResponse.json({ error: "Ошибка сервера" }, { status: 500 });
   }
 }
