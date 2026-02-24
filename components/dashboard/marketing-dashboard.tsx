@@ -110,7 +110,7 @@ export default function MarketingDashboard() {
       map[lead.channelId] = (map[lead.channelId] || 0) + 1;
     }
     return Object.entries(map)
-      .map(([id, count]) => ({ channelId: Number(id), channelName: channelMap[Number(id)] || `Канал #${id}`, count }))
+      .map(([id, count]) => ({ channelId: Number(id), channelName: Number(id) === 0 ? "Неизвестен" : (channelMap[Number(id)] || `Канал #${id}`), count }))
       .sort((a, b) => b.count - a.count);
   }, [todayLeads, channelMap]);
 
@@ -303,7 +303,7 @@ export default function MarketingDashboard() {
               ) : myTodayDeptTasks.length === 0 && myTodayProjectTasks.length === 0 && myTodayStandaloneTasks.length === 0 ? (
                 <p className="text-sm text-gray-400 py-4 text-center">Нет задач на сегодня</p>
               ) : (
-                <div className="space-y-1 max-h-[400px] overflow-y-auto">
+                <div className="space-y-1 ">
                   {/* Department tasks */}
                   {myTodayDeptTasks.map((item) => (
                     <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
@@ -522,7 +522,7 @@ export default function MarketingDashboard() {
                 {activeProjects.length === 0 ? (
                   <p className="text-sm text-gray-400 py-4 text-center">Нет активных проектов</p>
                 ) : (
-                  <div className="space-y-2 max-h-[320px] overflow-y-auto">
+                  <div className="space-y-2 ">
                     {activeProjects.map((project) => {
                       const completion = calcProjectCompletion(project);
                       const allTasks = project.stages.flatMap((s) => s.tasks);
@@ -573,7 +573,7 @@ export default function MarketingDashboard() {
                 {monthTasks.length === 0 && monthProjectTasks.length === 0 ? (
                   <p className="text-sm text-gray-400 py-4 text-center">Нет задач</p>
                 ) : (
-                  <div className="space-y-1 max-h-[320px] overflow-y-auto">
+                  <div className="space-y-1 ">
                     {monthTasks.map((item) => (
                       <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
                         <button
