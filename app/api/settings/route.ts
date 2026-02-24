@@ -55,8 +55,8 @@ export async function PUT(request: NextRequest) {
   for (const key of Object.keys(KEY_MAP)) {
     if (body[key] !== undefined) {
       await pool.query(
-        "UPDATE settings SET `value`=? WHERE `key`=?",
-        [String(body[key]), key]
+        "INSERT INTO settings (`key`, `value`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)",
+        [key, String(body[key])]
       );
     }
   }

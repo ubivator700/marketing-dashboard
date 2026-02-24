@@ -22,6 +22,7 @@ function getDayType(emp: Employee, dateKey: string): DayType {
 export default function MarketingDashboard() {
   const {
     departments,
+    setDepartments,
     employees,
     leads,
     expenses,
@@ -30,13 +31,60 @@ export default function MarketingDashboard() {
     dailyLeadPlan,
     monthlyLeadPlan,
     projects,
+    setProjects,
     standaloneTasks,
+    setStandaloneTasks,
   } = useAppContext();
 
   const { user } = useAuth();
   const employeeName = user?.employeeName ?? null;
 
   const [tab, setTab] = useState<"today" | "month">("today");
+
+  // Toggle department task done status
+  const toggleDeptTask = (deptId: string, taskId: number) => {
+    setDepartments((prev) =>
+      prev.map((d) => {
+        if (d.id !== deptId) return d;
+        return {
+          ...d,
+          tasks: d.tasks.map((t) =>
+            t.id === taskId ? { ...t, status: t.status === "done" ? "todo" : "done" } : t
+          ),
+        };
+      })
+    );
+  };
+
+  // Toggle project task done status
+  const toggleProjectTask = (projectId: number, stageId: number, taskId: number) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          stages: p.stages.map((s) => {
+            if (s.id !== stageId) return s;
+            return {
+              ...s,
+              tasks: s.tasks.map((t) =>
+                t.id === taskId ? { ...t, status: t.status === "done" ? "todo" : "done" } : t
+              ),
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  // Toggle standalone task done status
+  const toggleStandaloneTask = (taskId: number) => {
+    setStandaloneTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, status: t.status === "done" ? "todo" : "done" } : t
+      )
+    );
+  };
 
   const now = new Date();
   const todayKey = formatDateKey(now);
@@ -69,12 +117,12 @@ export default function MarketingDashboard() {
   // Department tasks due today assigned to current user (department.person matches employeeName)
   const myTodayDeptTasks = useMemo(() => {
     if (!employeeName) return [];
-    const result: { task: Task; deptName: string; deptColor: string }[] = [];
+    const result: { task: Task; deptId: string; deptName: string; deptColor: string }[] = [];
     for (const dept of departments) {
       if (dept.person !== employeeName) continue;
       for (const task of dept.tasks) {
         if (task.dueDate === todayKey) {
-          result.push({ task, deptName: dept.name.split("/")[0].trim(), deptColor: dept.color });
+          result.push({ task, deptId: dept.id, deptName: dept.name.split("/")[0].trim(), deptColor: dept.color });
         }
       }
     }
@@ -84,12 +132,12 @@ export default function MarketingDashboard() {
   // Project tasks due today assigned to current user
   const myTodayProjectTasks = useMemo(() => {
     if (!employeeName) return [];
-    const result: { name: string; projectName: string; status: string }[] = [];
+    const result: { name: string; projectName: string; status: string; projectId: number; stageId: number; taskId: number }[] = [];
     for (const project of projects) {
       for (const stage of project.stages) {
         for (const task of stage.tasks) {
           if (task.deadline === todayKey && task.assignee === employeeName) {
-            result.push({ name: task.name, projectName: project.name, status: task.status });
+            result.push({ name: task.name, projectName: project.name, status: task.status, projectId: project.id, stageId: stage.id, taskId: task.id });
           }
         }
       }
@@ -118,11 +166,11 @@ export default function MarketingDashboard() {
 
   // All tasks due today (for month tab)
   const todayTasks = useMemo(() => {
-    const result: { task: Task; deptName: string; deptColor: string }[] = [];
+    const result: { task: Task; deptId: string; deptName: string; deptColor: string }[] = [];
     for (const dept of departments) {
       for (const task of dept.tasks) {
         if (task.dueDate === todayKey) {
-          result.push({ task, deptName: dept.name.split("/")[0].trim(), deptColor: dept.color });
+          result.push({ task, deptId: dept.id, deptName: dept.name.split("/")[0].trim(), deptColor: dept.color });
         }
       }
     }
@@ -165,11 +213,11 @@ export default function MarketingDashboard() {
 
   // Tasks this month (department tasks)
   const monthTasks = useMemo(() => {
-    const result: { task: Task; deptName: string; deptColor: string }[] = [];
+    const result: { task: Task; deptId: string; deptName: string; deptColor: string }[] = [];
     for (const dept of departments) {
       for (const task of dept.tasks) {
         if (task.dueDate.startsWith(monthPrefix)) {
-          result.push({ task, deptName: dept.name.split("/")[0].trim(), deptColor: dept.color });
+          result.push({ task, deptId: dept.id, deptName: dept.name.split("/")[0].trim(), deptColor: dept.color });
         }
       }
     }
@@ -177,12 +225,12 @@ export default function MarketingDashboard() {
   }, [departments, monthPrefix]);
 
   const monthProjectTasks = useMemo(() => {
-    const result: { name: string; projectName: string; status: string }[] = [];
+    const result: { name: string; projectName: string; status: string; projectId: number; stageId: number; taskId: number }[] = [];
     for (const project of projects) {
       for (const stage of project.stages) {
         for (const task of stage.tasks) {
           if (task.deadline.startsWith(monthPrefix)) {
-            result.push({ name: task.name, projectName: project.name, status: task.status });
+            result.push({ name: task.name, projectName: project.name, status: task.status, projectId: project.id, stageId: stage.id, taskId: task.id });
           }
         }
       }
@@ -258,42 +306,67 @@ export default function MarketingDashboard() {
                 <div className="space-y-1 max-h-[400px] overflow-y-auto">
                   {/* Department tasks */}
                   {myTodayDeptTasks.map((item) => (
-                    <div key={`dept-${item.task.id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.deptColor }} />
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${statusColors[item.task.status]}`}>
-                        {statusLabels[item.task.status]}
-                      </span>
-                      <span className="text-sm text-gray-800 flex-1 truncate">{item.task.text}</span>
+                    <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
+                      <button
+                        onClick={() => toggleDeptTask(item.deptId, item.task.id)}
+                        className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                          item.task.status === "done"
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-gray-300 hover:border-green-400"
+                        }`}
+                        title={item.task.status === "done" ? "Вернуть" : "Готово"}
+                      >
+                        {item.task.status === "done" && (
+                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <span className={`text-sm text-gray-800 flex-1 ${item.task.status === "done" ? "line-through text-gray-400" : ""}`}>{item.task.text}</span>
                       <span className="text-[10px] text-gray-400 flex-shrink-0">{item.deptName}</span>
                     </div>
                   ))}
                   {/* Project tasks */}
-                  {myTodayProjectTasks.map((item, i) => (
-                    <div key={`proj-${i}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0 bg-indigo-500" />
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        item.status === "done" ? "bg-green-100 text-green-700" :
-                        item.status === "in_progress" ? "bg-blue-100 text-blue-700" :
-                        "bg-gray-100 text-gray-700"
-                      }`}>
-                        {item.status === "done" ? "Готово" : item.status === "in_progress" ? "В работе" : "К выполнению"}
-                      </span>
-                      <span className="text-sm text-gray-800 flex-1 truncate">{item.name}</span>
+                  {myTodayProjectTasks.map((item) => (
+                    <div key={`proj-${item.taskId}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50 ${item.status === "done" ? "opacity-60" : ""}`}>
+                      <button
+                        onClick={() => toggleProjectTask(item.projectId, item.stageId, item.taskId)}
+                        className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                          item.status === "done"
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-gray-300 hover:border-green-400"
+                        }`}
+                        title={item.status === "done" ? "Вернуть" : "Готово"}
+                      >
+                        {item.status === "done" && (
+                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <span className={`text-sm text-gray-800 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
                       <span className="text-[10px] text-indigo-500 flex-shrink-0">{item.projectName}</span>
                     </div>
                   ))}
                   {/* Standalone tasks */}
                   {myTodayStandaloneTasks.map((task) => (
-                    <div key={`standalone-${task.id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/50">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0 bg-amber-500" />
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
-                        task.status === "done" ? "bg-green-100 text-green-700" :
-                        task.status === "in_progress" ? "bg-blue-100 text-blue-700" :
-                        "bg-gray-100 text-gray-700"
-                      }`}>
-                        {task.status === "done" ? "Готово" : task.status === "in_progress" ? "В работе" : "К выполнению"}
-                      </span>
-                      <span className="text-sm text-gray-800 flex-1 truncate">{task.name}</span>
+                    <div key={`standalone-${task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/50 ${task.status === "done" ? "opacity-60" : ""}`}>
+                      <button
+                        onClick={() => toggleStandaloneTask(task.id)}
+                        className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                          task.status === "done"
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-gray-300 hover:border-green-400"
+                        }`}
+                        title={task.status === "done" ? "Вернуть" : "Готово"}
+                      >
+                        {task.status === "done" && (
+                          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <span className={`text-sm text-gray-800 flex-1 ${task.status === "done" ? "line-through text-gray-400" : ""}`}>{task.name}</span>
                       <span className="text-[10px] text-amber-500 flex-shrink-0">Задача</span>
                     </div>
                   ))}
@@ -363,7 +436,7 @@ export default function MarketingDashboard() {
                 <div className="space-y-1.5">
                   {myTodayExpenses.map((expense) => (
                     <div key={expense.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50">
-                      <span className="text-sm text-gray-800 flex-1 truncate">{expense.name}</span>
+                      <span className="text-sm text-gray-800 flex-1">{expense.name}</span>
                       <span className="text-sm font-semibold text-red-500 flex-shrink-0 ml-2">
                         {expense.amount.toLocaleString("ru-RU")} ₽
                       </span>
@@ -502,28 +575,46 @@ export default function MarketingDashboard() {
                 ) : (
                   <div className="space-y-1 max-h-[320px] overflow-y-auto">
                     {monthTasks.map((item) => (
-                      <div key={`dept-${item.task.id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.deptColor }} />
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${statusColors[item.task.status]}`}>
-                          {statusLabels[item.task.status]}
-                        </span>
-                        <span className="text-sm text-gray-800 flex-1 truncate">{item.task.text}</span>
+                      <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
+                        <button
+                          onClick={() => toggleDeptTask(item.deptId, item.task.id)}
+                          className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                            item.task.status === "done"
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-gray-300 hover:border-green-400"
+                          }`}
+                          title={item.task.status === "done" ? "Вернуть" : "Готово"}
+                        >
+                          {item.task.status === "done" && (
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <span className={`text-sm text-gray-800 flex-1 ${item.task.status === "done" ? "line-through text-gray-400" : ""}`}>{item.task.text}</span>
                         <span className="text-[10px] text-gray-400 flex-shrink-0">
                           {new Date(item.task.dueDate + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
                         </span>
                       </div>
                     ))}
-                    {monthProjectTasks.map((item, i) => (
-                      <div key={`proj-${i}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50">
-                        <div className="w-2 h-2 rounded-full flex-shrink-0 bg-indigo-500" />
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${
-                          item.status === "done" ? "bg-green-100 text-green-700" :
-                          item.status === "in_progress" ? "bg-blue-100 text-blue-700" :
-                          "bg-gray-100 text-gray-700"
-                        }`}>
-                          {item.status === "done" ? "Готово" : item.status === "in_progress" ? "В работе" : "К выполнению"}
-                        </span>
-                        <span className="text-sm text-gray-800 flex-1 truncate">{item.name}</span>
+                    {monthProjectTasks.map((item) => (
+                      <div key={`proj-${item.taskId}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50 ${item.status === "done" ? "opacity-60" : ""}`}>
+                        <button
+                          onClick={() => toggleProjectTask(item.projectId, item.stageId, item.taskId)}
+                          className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                            item.status === "done"
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-gray-300 hover:border-green-400"
+                          }`}
+                          title={item.status === "done" ? "Вернуть" : "Готово"}
+                        >
+                          {item.status === "done" && (
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <span className={`text-sm text-gray-800 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
                         <span className="text-[10px] text-indigo-500 flex-shrink-0">{item.projectName}</span>
                       </div>
                     ))}

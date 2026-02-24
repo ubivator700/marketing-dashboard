@@ -130,10 +130,12 @@ export default function ChannelsDashboard() {
         0
       );
       const romi = channelRomi(income, groupExpenses);
+      const leadCount = leads.filter((l) => groupChannelIds.includes(l.channelId)).length;
       return {
         id: g.id,
         label: g.label,
         channelCount: groupChannels.length,
+        leadCount,
         income,
         expenses: groupExpenses,
         romi,
@@ -379,9 +381,14 @@ export default function ChannelsDashboard() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-gray-900">{g.label}</h3>
-                <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                  {g.channelCount} канал{g.channelCount === 1 ? "" : g.channelCount < 5 ? "а" : "ов"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                    {g.leadCount} лид{g.leadCount === 1 ? "" : g.leadCount < 5 ? "а" : "ов"}
+                  </span>
+                  <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                    {g.channelCount} канал{g.channelCount === 1 ? "" : g.channelCount < 5 ? "а" : "ов"}
+                  </span>
+                </div>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">

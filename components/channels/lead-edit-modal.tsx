@@ -33,7 +33,6 @@ export default function LeadEditModal({
 
   const handleSave = () => {
     if (!name.trim()) { setError("Введите имя лида"); return; }
-    if (!channelId) { setError("Выберите канал"); return; }
     onSave({
       id: lead?.id ?? Date.now(),
       name: name.trim(),
@@ -80,6 +79,7 @@ export default function LeadEditModal({
               onChange={(e) => setChannelId(Number(e.target.value))}
               className={selectClass}
             >
+              <option value={0}>Рекламный канал неизвестен</option>
               {channels.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}

@@ -175,12 +175,12 @@ CREATE TABLE channel_tasks (
 CREATE TABLE leads (
   id             BIGINT AUTO_INCREMENT PRIMARY KEY,
   name           VARCHAR(200)                              NOT NULL,
-  channel_id     BIGINT                                    NOT NULL,
+  channel_id     BIGINT                                    NULL,
   contact_method ENUM('salon','phone','social')            NOT NULL,
   result         ENUM('measurement','sale','deferred')     NOT NULL,
   date           DATE                                      NOT NULL,
   note           TEXT                                      NULL,
-  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE
+  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- ═══════════════════════════════════════════════════════
@@ -383,7 +383,8 @@ INSERT INTO expenses (id, name, amount, responsible, date, project_id, channel_i
 INSERT INTO settings (`key`, `value`) VALUES
   ('averageCheck', '8000'),
   ('monthlyLeadPlan', '200'),
-  ('dailyLeadPlan', '7');
+  ('dailyLeadPlan', '7'),
+  ('monthlyBudget', '0');
 
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, employee_name, role) VALUES

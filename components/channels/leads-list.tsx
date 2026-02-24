@@ -30,7 +30,7 @@ export default function LeadsList({
   }, [channels]);
 
   const channelName = (channelId: number): string =>
-    channelMap.get(channelId) ?? "—";
+    channelId === 0 ? "Неизвестен" : (channelMap.get(channelId) ?? "—");
 
   const sorted = useMemo(() => {
     const arr = [...leads];
