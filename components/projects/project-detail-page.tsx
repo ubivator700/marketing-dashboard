@@ -279,36 +279,67 @@ export default function ProjectDetailPage({ projectId }: ProjectDetailPageProps)
                         <p className="text-sm text-gray-400 py-3 text-center">Нет задач</p>
                       ) : (
                         stage.tasks.map((task) => (
-                          <button
+                          <div
                             key={task.id}
-                            onClick={() =>
-                              setTaskModal({
-                                task,
-                                projectId: project.id,
-                                stageId: stage.id,
-                                stageName: stage.name,
-                              })
-                            }
-                            className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors group"
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors group ${task.status === "done" ? "opacity-60" : ""}`}
                           >
-                            <span
-                              className={`text-xs px-2.5 py-1 rounded-full flex-shrink-0 ${projectTaskStatusColors[task.status]}`}
+                            <button
+                              onClick={() => {
+                                const newStatus = task.status === "done" ? "todo" : "done";
+                                setProjects((prev) =>
+                                  prev.map((p) =>
+                                    p.id !== project.id ? p : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== stage.id ? s : {
+                                          ...s,
+                                          tasks: s.tasks.map((t) =>
+                                            t.id !== task.id ? t : { ...t, status: newStatus }
+                                          ),
+                                        }
+                                      ),
+                                    }
+                                  )
+                                );
+                              }}
+                              className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                                task.status === "done"
+                                  ? "bg-green-500 border-green-500 text-white"
+                                  : "border-gray-300 hover:border-green-400"
+                              }`}
+                              title={task.status === "done" ? "Вернуть в работу" : "Отметить как готово"}
                             >
-                              {projectTaskStatusLabels[task.status]}
-                            </span>
-                            <span className="text-sm text-gray-800 flex-1 min-w-0 truncate font-medium">
-                              {task.name}
-                            </span>
-                            <span className="text-xs text-gray-400 flex-shrink-0">
-                              {task.assignee}
-                            </span>
-                            <span className="text-xs text-gray-400 flex-shrink-0">
-                              {new Date(task.deadline + "T00:00:00").toLocaleDateString("ru-RU", {
-                                day: "numeric",
-                                month: "short",
-                              })}
-                            </span>
-                          </button>
+                              {task.status === "done" && (
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                            <button
+                              onClick={() =>
+                                setTaskModal({
+                                  task,
+                                  projectId: project.id,
+                                  stageId: stage.id,
+                                  stageName: stage.name,
+                                })
+                              }
+                              className="flex-1 min-w-0 text-left flex items-center gap-3 cursor-pointer"
+                            >
+                              <span className={`text-sm text-gray-800 flex-1 min-w-0 font-medium ${task.status === "done" ? "line-through text-gray-400" : ""}`}>
+                                {task.name}
+                              </span>
+                              <span className="text-xs text-gray-400 flex-shrink-0">
+                                {task.assignee}
+                              </span>
+                              <span className="text-xs text-gray-400 flex-shrink-0">
+                                {new Date(task.deadline + "T00:00:00").toLocaleDateString("ru-RU", {
+                                  day: "numeric",
+                                  month: "short",
+                                })}
+                              </span>
+                            </button>
+                          </div>
                         ))
                       )}
                       <button

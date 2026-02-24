@@ -195,10 +195,26 @@ export default function BoardTab({
                         className="flex items-center justify-between gap-2"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${priorityDots[task.priority]}`}
-                          />
-                          <span className="text-xs text-gray-700 truncate">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newStatus = task.status === "done" ? "todo" : "done";
+                              onTaskSave(project.dept.id, { ...task, status: newStatus });
+                            }}
+                            className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                              task.status === "done"
+                                ? "bg-green-500 border-green-500 text-white"
+                                : "border-gray-300 hover:border-green-400"
+                            }`}
+                            title={task.status === "done" ? "Вернуть в работу" : "Готово"}
+                          >
+                            {task.status === "done" && (
+                              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                          <span className={`text-xs text-gray-700 ${task.status === "done" ? "line-through text-gray-400" : ""}`}>
                             {task.text}
                           </span>
                         </div>
@@ -234,29 +250,48 @@ export default function BoardTab({
         </div>
         <div className="grid md:grid-cols-3 gap-4">
           {keyTasks.map((task) => (
-            <button
+            <div
               key={`${task.dept.id}-${task.id}`}
-              onClick={() =>
-                setEditingTask({
-                  task,
-                  deptId: task.dept.id,
-                  deptName: task.dept.name,
-                  deptIcon: task.dept.icon,
-                })
-              }
-              className={`text-left bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow cursor-pointer ${
+              className={`text-left bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow ${
                 task.priority === "high" ? "ring-1 ring-red-100" : ""
-              }`}
+              } ${task.status === "done" ? "opacity-60" : ""}`}
             >
               <div className="flex items-start gap-2">
-                <div
-                  className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${priorityDots[task.priority]}`}
-                />
-                <div className="flex-1 min-w-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newStatus = task.status === "done" ? "todo" : "done";
+                    const { dept: _, ...plain } = task;
+                    onTaskSave(task.dept.id, { ...plain, status: newStatus });
+                  }}
+                  className={`w-5 h-5 rounded-full border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-colors ${
+                    task.status === "done"
+                      ? "bg-green-500 border-green-500 text-white"
+                      : "border-gray-300 hover:border-green-400"
+                  }`}
+                  title={task.status === "done" ? "Вернуть в работу" : "Отметить как готово"}
+                >
+                  {task.status === "done" && (
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    setEditingTask({
+                      task,
+                      deptId: task.dept.id,
+                      deptName: task.dept.name,
+                      deptIcon: task.dept.icon,
+                    })
+                  }
+                  className="flex-1 min-w-0 text-left cursor-pointer"
+                >
                   <p
                     className={`font-medium text-gray-900 ${
                       task.priority === "high" ? "text-base" : "text-sm"
-                    }`}
+                    } ${task.status === "done" ? "line-through" : ""}`}
                   >
                     {task.text}
                   </p>
@@ -289,9 +324,9 @@ export default function BoardTab({
                       month: "short",
                     })}
                   </p>
-                </div>
+                </button>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </div>

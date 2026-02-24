@@ -23,7 +23,7 @@ const dayTypeCellColors: Record<DayType, string> = {
 const dayTypeCycle: DayType[] = ["work", "dayoff", "vacation"];
 
 export default function OrganizationDashboard() {
-  const { departments, employees, setEmployees, expenses } = useAppContext();
+  const { departments, setDepartments, employees, setEmployees, expenses } = useAppContext();
 
   const [tab, setTab] = useState<OrgTabId>("structure");
   const [selectedDept, setSelectedDept] = useState<DepartmentId | null>(null);
@@ -263,15 +263,36 @@ export default function OrganizationDashboard() {
                           {expandedDeptIds.has(dept.id) && (
                             <div className="mt-2 space-y-1">
                               {dept.tasks.map((task) => (
-                                <div key={task.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50">
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
-                                    task.status === "done" ? "bg-green-100 text-green-700"
-                                    : task.status === "in_progress" ? "bg-blue-100 text-blue-700"
-                                    : "bg-gray-100 text-gray-700"
-                                  }`}>
-                                    {task.status === "done" ? "Готово" : task.status === "in_progress" ? "В работе" : "К выполнению"}
-                                  </span>
-                                  <span className="text-sm text-gray-800 flex-1 truncate">{task.text}</span>
+                                <div key={task.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 ${task.status === "done" ? "opacity-60" : ""}`}>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const newStatus = task.status === "done" ? "todo" : "done";
+                                      setDepartments((prev) =>
+                                        prev.map((d) =>
+                                          d.id !== dept.id ? d : {
+                                            ...d,
+                                            tasks: d.tasks.map((t) =>
+                                              t.id !== task.id ? t : { ...t, status: newStatus }
+                                            ),
+                                          }
+                                        )
+                                      );
+                                    }}
+                                    className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                                      task.status === "done"
+                                        ? "bg-green-500 border-green-500 text-white"
+                                        : "border-gray-300 hover:border-green-400"
+                                    }`}
+                                    title={task.status === "done" ? "Вернуть" : "Готово"}
+                                  >
+                                    {task.status === "done" && (
+                                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                  <span className={`text-sm text-gray-800 flex-1 ${task.status === "done" ? "line-through text-gray-400" : ""}`}>{task.text}</span>
                                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                                     task.priority === "high" ? "bg-red-500"
                                     : task.priority === "medium" ? "bg-amber-500"
@@ -326,6 +347,18 @@ export default function OrganizationDashboard() {
               <EmployeeDetail
                 employee={employees.find((e) => e.name === selectedEmployee)!}
                 departments={departments}
+                onToggleTask={(deptId, taskId) => {
+                  setDepartments((prev) =>
+                    prev.map((d) =>
+                      d.id !== deptId ? d : {
+                        ...d,
+                        tasks: d.tasks.map((t) =>
+                          t.id !== taskId ? t : { ...t, status: t.status === "done" ? "todo" : "done" }
+                        ),
+                      }
+                    )
+                  );
+                }}
               />
             )}
           </div>
@@ -477,9 +510,11 @@ export default function OrganizationDashboard() {
 function EmployeeDetail({
   employee,
   departments,
+  onToggleTask,
 }: {
   employee: Employee;
   departments: import("@/types/dashboard").Department[];
+  onToggleTask: (deptId: string, taskId: number) => void;
 }) {
   const dept = departments.find((d) => d.id === employee.departmentId);
   const deptTasks = dept?.tasks ?? [];
@@ -510,15 +545,23 @@ function EmployeeDetail({
           ) : (
             <div className="space-y-1">
               {deptTasks.map((task) => (
-                <div key={task.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                    task.status === "done" ? "bg-green-100 text-green-700"
-                    : task.status === "in_progress" ? "bg-blue-100 text-blue-700"
-                    : "bg-gray-100 text-gray-700"
-                  }`}>
-                    {task.status === "done" ? "Готово" : task.status === "in_progress" ? "В работе" : "К выполнению"}
-                  </span>
-                  <span className="text-sm text-gray-800 flex-1 truncate">{task.text}</span>
+                <div key={task.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 ${task.status === "done" ? "opacity-60" : ""}`}>
+                  <button
+                    onClick={() => dept && onToggleTask(dept.id, task.id)}
+                    className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                      task.status === "done"
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "border-gray-300 hover:border-green-400"
+                    }`}
+                    title={task.status === "done" ? "Вернуть" : "Готово"}
+                  >
+                    {task.status === "done" && (
+                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  <span className={`text-sm text-gray-800 flex-1 ${task.status === "done" ? "line-through text-gray-400" : ""}`}>{task.text}</span>
                 </div>
               ))}
             </div>

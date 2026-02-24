@@ -145,8 +145,8 @@ export default function StandaloneTasksTab({
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left border-b border-gray-100">
-                  <th className={thClass} onClick={() => handleSort("status")}>
-                    Статус <SortIcon field="status" />
+                  <th className={`${thClass} w-12`} onClick={() => handleSort("status")}>
+                    <SortIcon field="status" />
                   </th>
                   <th className={thClass} onClick={() => handleSort("name")}>
                     Задача <SortIcon field="name" />
@@ -166,22 +166,37 @@ export default function StandaloneTasksTab({
                 {sorted.map((task) => (
                   <tr
                     key={task.id}
-                    onClick={() => setEditingTask(task)}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    className={`hover:bg-gray-50 transition-colors ${task.status === "done" ? "opacity-60" : ""}`}
                   >
                     <td className="px-4 py-3">
-                      <span
-                        className={`text-xs px-2.5 py-1 rounded-full ${projectTaskStatusColors[task.status]}`}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSave({ ...task, status: task.status === "done" ? "todo" : "done" });
+                        }}
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                          task.status === "done"
+                            ? "bg-green-500 border-green-500 text-white"
+                            : "border-gray-300 hover:border-green-400"
+                        }`}
+                        title={task.status === "done" ? "Вернуть в работу" : "Отметить как готово"}
                       >
-                        {projectTaskStatusLabels[task.status]}
-                      </span>
+                        {task.status === "done" && (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-900 max-w-[250px] truncate">
+                    <td
+                      className={`px-4 py-3 font-medium text-gray-900 max-w-[250px] cursor-pointer ${task.status === "done" ? "line-through text-gray-400" : ""}`}
+                      onClick={() => setEditingTask(task)}
+                    >
                       {task.name}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{task.assignee}</td>
-                    <td className="px-4 py-3 text-gray-500">{channelName(task.channelId)}</td>
-                    <td className="px-4 py-3 text-gray-400">
+                    <td className="px-4 py-3 text-gray-500 cursor-pointer" onClick={() => setEditingTask(task)}>{task.assignee}</td>
+                    <td className="px-4 py-3 text-gray-500 cursor-pointer" onClick={() => setEditingTask(task)}>{channelName(task.channelId)}</td>
+                    <td className="px-4 py-3 text-gray-400 cursor-pointer" onClick={() => setEditingTask(task)}>
                       {new Date(task.deadline + "T00:00:00").toLocaleDateString("ru-RU", {
                         day: "numeric",
                         month: "short",

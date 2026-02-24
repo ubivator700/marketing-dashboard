@@ -24,7 +24,7 @@ export async function GET() {
   const leads = rows.map((r) => ({
     id: r.id,
     name: r.name,
-    channelId: r.channel_id,
+    channelId: r.channel_id ?? 0,
     contactMethod: r.contact_method,
     result: r.result,
     date: formatDate(r.date),
@@ -44,17 +44,20 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { id, name, channelId, contactMethod, result, date, note } = body;
 
+  // channelId=0 means "unknown channel" — store as NULL in DB
+  const dbChannelId = channelId === 0 ? null : channelId;
+
   let insertId: number;
   if (id) {
     await pool.query(
       "INSERT INTO leads (id, name, channel_id, contact_method, result, date, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [id, name, channelId, contactMethod, result, date, note ?? null]
+      [id, name, dbChannelId, contactMethod, result, date, note ?? null]
     );
     insertId = id;
   } else {
     const [queryResult] = await pool.query(
       "INSERT INTO leads (name, channel_id, contact_method, result, date, note) VALUES (?, ?, ?, ?, ?, ?)",
-      [name, channelId, contactMethod, result, date, note ?? null]
+      [name, dbChannelId, contactMethod, result, date, note ?? null]
     );
     insertId = (queryResult as { insertId: number }).insertId;
   }

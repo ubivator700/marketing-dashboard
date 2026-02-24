@@ -17,9 +17,12 @@ export async function PUT(
   const body = await request.json();
   const { name, channelId, contactMethod, result, date, note } = body;
 
+  // channelId=0 means "unknown channel" — store as NULL in DB
+  const dbChannelId = channelId === 0 ? null : channelId;
+
   await pool.query(
     "UPDATE leads SET name=?, channel_id=?, contact_method=?, result=?, date=?, note=? WHERE id=?",
-    [name, channelId, contactMethod, result, date, note ?? null, id]
+    [name, dbChannelId, contactMethod, result, date, note ?? null, id]
   );
 
   return NextResponse.json({
