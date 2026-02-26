@@ -13,6 +13,7 @@ const KEY_MAP: Record<string, string> = {
   monthlyLeadPlan: "monthlyLeadPlan",
   dailyLeadPlan: "dailyLeadPlan",
   monthlyBudget: "monthlyBudget",
+  taxCoefficient: "taxCoefficient",
 };
 
 async function fetchSettings() {
@@ -23,6 +24,7 @@ async function fetchSettings() {
     monthlyLeadPlan: 0,
     dailyLeadPlan: 0,
     monthlyBudget: 0,
+    taxCoefficient: 0.07,
   };
 
   for (const row of rows) {
@@ -51,6 +53,11 @@ export async function PUT(request: NextRequest) {
   if (writeError) return writeError;
 
   const body = await request.json();
+
+  // Only admin can change tax coefficient
+  if (body.taxCoefficient !== undefined && session!.role !== "admin") {
+    return NextResponse.json({ error: "Только администратор может менять налоговый коэффициент" }, { status: 403 });
+  }
 
   for (const key of Object.keys(KEY_MAP)) {
     if (body[key] !== undefined) {

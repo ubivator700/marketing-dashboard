@@ -1,18 +1,19 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { Expense, Project, Channel } from "@/types/dashboard";
+import type { Expense, Project, Channel, Store } from "@/types/dashboard";
 
 interface ExpenseTableProps {
   expenses: Expense[];
   projects: Project[];
   channels: Channel[];
+  stores?: Store[];
   total: number;
   onEdit: (expense: Expense) => void;
   onDelete: (expenseId: number) => void;
 }
 
-type SortField = "date" | "name" | "amount" | "responsible" | "project" | "channel";
+type SortField = "date" | "name" | "amount" | "responsible" | "project" | "channel" | "store";
 type SortDir = "asc" | "desc";
 
 function formatAmount(amount: number): string {
@@ -31,6 +32,7 @@ export default function ExpenseTable({
   expenses,
   projects,
   channels,
+  stores = [],
   total,
   onEdit,
   onDelete,
@@ -46,6 +48,11 @@ export default function ExpenseTable({
   const channelName = (channelId: number | null | undefined): string => {
     if (channelId === null || channelId === undefined) return "—";
     return channels.find((c) => c.id === channelId)?.name ?? "—";
+  };
+
+  const storeNameFn = (storeId: number | null | undefined): string => {
+    if (storeId === null || storeId === undefined) return "—";
+    return stores.find((s) => s.id === storeId)?.name ?? "—";
   };
 
   const sorted = useMemo(() => {
@@ -70,6 +77,9 @@ export default function ExpenseTable({
           break;
         case "channel":
           cmp = channelName(a.channelId).localeCompare(channelName(b.channelId), "ru");
+          break;
+        case "store":
+          cmp = storeNameFn(a.storeId).localeCompare(storeNameFn(b.storeId), "ru");
           break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -119,6 +129,11 @@ export default function ExpenseTable({
               <th className={`text-left ${thClass}`} onClick={() => handleSort("channel")}>
                 Канал <SortIcon field="channel" />
               </th>
+              {stores.length > 0 && (
+                <th className={`text-left ${thClass}`} onClick={() => handleSort("store")}>
+                  Точка <SortIcon field="store" />
+                </th>
+              )}
               <th className="text-right text-xs font-semibold text-gray-500 px-5 py-3 uppercase tracking-wide w-20">Действия</th>
             </tr>
           </thead>
@@ -151,6 +166,11 @@ export default function ExpenseTable({
                 <td className="px-5 py-3">
                   <span className="text-sm text-gray-500">{channelName(expense.channelId)}</span>
                 </td>
+                {stores.length > 0 && (
+                  <td className="px-5 py-3">
+                    <span className="text-sm text-gray-500">{storeNameFn(expense.storeId)}</span>
+                  </td>
+                )}
                 <td className="px-5 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <button
@@ -175,7 +195,7 @@ export default function ExpenseTable({
             ))}
             {expenses.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-gray-400 text-sm">
+                <td colSpan={stores.length > 0 ? 8 : 7} className="px-5 py-8 text-center text-gray-400 text-sm">
                   Нет расходов
                 </td>
               </tr>
@@ -187,7 +207,7 @@ export default function ExpenseTable({
                 <td className="px-5 py-3" />
                 <td className="px-5 py-3 text-sm font-bold text-gray-900">Итого</td>
                 <td className="px-5 py-3 text-right text-sm font-bold text-gray-900">{formatAmount(total)}</td>
-                <td colSpan={4} />
+                <td colSpan={stores.length > 0 ? 5 : 4} />
               </tr>
             </tfoot>
           )}

@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import type { Lead, Channel, ContactMethod, LeadResult } from "@/types/dashboard";
+import type { Lead, Channel, ContactMethod, LeadResult, Store, ProductType } from "@/types/dashboard";
 import { contactMethodLabels, leadResultLabels } from "@/lib/leads-data";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 interface LeadEditModalProps {
   lead: Lead | null;
   channels: Channel[];
+  stores?: Store[];
+  defaultStoreId?: number | null;
+  productTypes?: ProductType[];
   onSave: (lead: Lead) => void;
   onDelete?: (leadId: number) => void;
   onClose: () => void;
@@ -16,6 +19,9 @@ interface LeadEditModalProps {
 export default function LeadEditModal({
   lead,
   channels,
+  stores = [],
+  defaultStoreId = null,
+  productTypes = [],
   onSave,
   onDelete,
   onClose,
@@ -29,7 +35,15 @@ export default function LeadEditModal({
   const [result, setResult] = useState<LeadResult>(lead?.result ?? "measurement");
   const [date, setDate] = useState(lead?.date ?? today);
   const [note, setNote] = useState(lead?.note ?? "");
+  const [storeId, setStoreId] = useState<number | null>(lead?.storeId ?? defaultStoreId);
+  const [selectedPtIds, setSelectedPtIds] = useState<number[]>(lead?.productTypeIds ?? []);
   const [error, setError] = useState("");
+
+  const toggleProductType = (ptId: number) => {
+    setSelectedPtIds((prev) =>
+      prev.includes(ptId) ? prev.filter((id) => id !== ptId) : [...prev, ptId]
+    );
+  };
 
   const handleSave = () => {
     if (!name.trim()) { setError("Введите имя лида"); return; }
@@ -41,6 +55,8 @@ export default function LeadEditModal({
       result,
       date,
       note: note.trim() || undefined,
+      storeId,
+      productTypeIds: selectedPtIds,
     });
   };
 
@@ -60,14 +76,27 @@ export default function LeadEditModal({
       <div className="space-y-3">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Имя</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => { setName(e.target.value); setError(""); }}
-            placeholder="ФИО клиента..."
-            className={inputClass}
-            autoFocus
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => { setName(e.target.value); setError(""); }}
+              placeholder="ФИО клиента..."
+              className={`${inputClass} flex-1`}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => { setName("Неизвестно"); setError(""); }}
+              className={`px-3 py-2 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap ${
+                name === "Неизвестно"
+                  ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                  : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+              }`}
+            >
+              Неизвестно
+            </button>
+          </div>
           {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
         </div>
 
@@ -137,6 +166,50 @@ export default function LeadEditModal({
             className={inputClass}
           />
         </div>
+
+        {stores.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Точка</label>
+            <select
+              value={storeId ?? ""}
+              onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : null)}
+              className={selectClass}
+            >
+              <option value="">Без точки</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {productTypes.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Типы товаров {selectedPtIds.length > 0 && <span className="text-indigo-500">({selectedPtIds.length})</span>}
+            </label>
+            <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-lg bg-white max-h-32 overflow-y-auto">
+              {productTypes.map((pt) => {
+                const isSelected = selectedPtIds.includes(pt.id);
+                return (
+                  <button
+                    key={pt.id}
+                    type="button"
+                    onClick={() => toggleProductType(pt.id)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      isSelected
+                        ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                        : "bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    {isSelected && <span className="mr-1">&#10003;</span>}
+                    {pt.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mt-6">

@@ -1,24 +1,31 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import type { Expense } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
 import { useAuth } from "@/lib/auth-context";
 import { totalExpenses as calcTotal, totalExpensesForChannel } from "@/lib/expense-utils";
 import ExpenseTable from "./expense-table";
 import ExpenseEditModal from "./expense-edit-modal";
+import StoreFilter from "@/components/ui/store-filter";
 
 export default function ExpensesDashboard() {
-  const { projects, expenses, setExpenses, monthlyBudget, setMonthlyBudget, channels } = useAppContext();
+  const {
+    projects, expenses, setExpenses, monthlyBudget, setMonthlyBudget, channels,
+    stores, selectedStoreId, setSelectedStoreId, filteredExpenses,
+  } = useAppContext();
   const { user } = useAuth();
   const role = user?.role;
   const [editing, setEditing] = useState<Expense | null | "create">(null);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState<string>("");
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ inserted: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [channelBreakdownOpen, setChannelBreakdownOpen] = useState(false);
   const [projectBreakdownOpen, setProjectBreakdownOpen] = useState(false);
 
-  const total = calcTotal(expenses);
+  const total = calcTotal(filteredExpenses);
   const grandTotal = total;
 
   // Current month prefix (e.g. "2026-02")
@@ -31,10 +38,10 @@ export default function ExpensesDashboard() {
 
   // Sum of expenses for the current month
   const spentThisMonth = useMemo(() => {
-    return expenses
+    return filteredExpenses
       .filter((e) => e.date.startsWith(currentMonthPrefix))
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [expenses, currentMonthPrefix]);
+  }, [filteredExpenses, currentMonthPrefix]);
 
   // Budget progress
   const budgetPct = monthlyBudget > 0 ? Math.round((spentThisMonth / monthlyBudget) * 100) : 0;
@@ -84,43 +91,90 @@ export default function ExpensesDashboard() {
   // Count expenses per project for stats
   const projectExpenseStats = useMemo(() => {
     const map = new Map<number, number>();
-    for (const e of expenses) {
+    for (const e of filteredExpenses) {
       if (e.projectId !== null) {
         map.set(e.projectId, (map.get(e.projectId) ?? 0) + e.amount);
       }
     }
     return map;
-  }, [expenses]);
+  }, [filteredExpenses]);
 
   // Count expenses per channel for stats
   const channelExpenseStats = useMemo(() => {
     const map = new Map<number, number>();
-    for (const e of expenses) {
+    for (const e of filteredExpenses) {
       if (e.channelId !== null && e.channelId !== undefined) {
         map.set(e.channelId, (map.get(e.channelId) ?? 0) + e.amount);
       }
     }
     return map;
-  }, [expenses]);
+  }, [filteredExpenses]);
+
+  // ─── Excel import ───
+  const handleDownloadTemplate = async () => {
+    const res = await fetch("/api/expenses/template");
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "expenses_template.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/expenses/import", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportResult({ inserted: 0, errors: [data.error ?? "Неизвестная ошибка"] });
+      } else {
+        setImportResult({ inserted: data.inserted, errors: data.errors ?? [] });
+        // Add imported expenses to state
+        if (data.expenses && data.expenses.length > 0) {
+          setExpenses((prev: Expense[]) => [...prev, ...data.expenses]);
+        }
+      }
+    } catch {
+      setImportResult({ inserted: 0, errors: ["Ошибка сети"] });
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Расходы</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Общая сумма: <span className="font-semibold text-gray-800">{grandTotal.toLocaleString("ru-RU")} ₽</span>
-            {" · "}{expenses.length} запис{expenses.length === 1 ? "ь" : expenses.length < 5 ? "и" : "ей"}
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Расходы</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            Общая сумма: <span className="font-semibold text-gray-800 dark:text-gray-200">{grandTotal.toLocaleString("ru-RU")} ₽</span>
+            {" · "}{filteredExpenses.length} запис{filteredExpenses.length === 1 ? "ь" : filteredExpenses.length < 5 ? "и" : "ей"}
           </p>
         </div>
 
+        {/* Store filter */}
+        {stores.length > 0 && (
+          <div className="mb-4">
+            <StoreFilter stores={stores} selectedStoreId={selectedStoreId} onSelect={setSelectedStoreId} />
+          </div>
+        )}
+
         {/* Budget section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-5 mb-6">
           <div className="flex flex-wrap items-center gap-6">
             {/* Budget per month */}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Бюджет на месяц</p>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Бюджет на месяц</p>
               <div className="flex items-center gap-2 mt-1">
                 {editingBudget ? (
                   <input
@@ -130,10 +184,10 @@ export default function ExpensesDashboard() {
                     onBlur={handleBudgetEditSave}
                     onKeyDown={handleBudgetKeyDown}
                     autoFocus
-                    className="w-36 text-xl font-bold text-gray-900 border border-gray-300 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-36 text-xl font-bold text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 ) : (
-                  <p className="text-xl font-bold text-gray-900">{monthlyBudget.toLocaleString("ru-RU")} ₽</p>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">{monthlyBudget.toLocaleString("ru-RU")} ₽</p>
                 )}
                 {role === "admin" && !editingBudget && (
                   <button
@@ -151,17 +205,17 @@ export default function ExpensesDashboard() {
 
             {/* Spent this month */}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Потрачено за месяц</p>
-              <p className="text-xl font-bold text-gray-900 mt-1">{spentThisMonth.toLocaleString("ru-RU")} ₽</p>
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Потрачено за месяц</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{spentThisMonth.toLocaleString("ru-RU")} ₽</p>
             </div>
 
             {/* Progress bar */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Использовано</p>
-                <span className="text-sm font-semibold text-gray-700">{budgetPct}%</span>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Использовано</p>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{budgetPct}%</span>
               </div>
-              <div className="w-full bg-gray-100 rounded-full h-3">
+              <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3">
                 <div
                   className={`${budgetBarColor} h-3 rounded-full transition-all`}
                   style={{ width: `${Math.min(budgetPct, 100)}%` }}
@@ -173,19 +227,19 @@ export default function ExpensesDashboard() {
 
         {/* Channel breakdown */}
         {channelExpenseStats.size > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
             <button
               onClick={() => setChannelBreakdownOpen((v) => !v)}
               className="w-full flex items-center justify-between p-5 text-left"
             >
-              <h2 className="text-sm font-bold text-gray-700">Расходы по рекламным каналам</h2>
+              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Расходы по рекламным каналам</h2>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {Array.from(channelExpenseStats.values()).reduce((a, b) => a + b, 0).toLocaleString("ru-RU")} ₽
                 </span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className={`h-4 w-4 text-gray-400 transition-transform ${channelBreakdownOpen ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${channelBreakdownOpen ? "rotate-180" : ""}`}
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
@@ -200,14 +254,14 @@ export default function ExpensesDashboard() {
                   const pct = grandTotal > 0 ? Math.round((amount / grandTotal) * 100) : 0;
                   return (
                     <div key={cid} className="flex items-center gap-3">
-                      <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{channel?.name ?? "Неизвестный"}</span>
-                      <div className="w-24 bg-gray-100 rounded-full h-2 hidden sm:block">
+                      <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0 truncate">{channel?.name ?? "Неизвестный"}</span>
+                      <div className="w-24 bg-gray-100 dark:bg-gray-700 rounded-full h-2 hidden sm:block">
                         <div
                           className="bg-indigo-500 h-2 rounded-full transition-all"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-sm font-medium text-gray-900 w-28 text-right">{amount.toLocaleString("ru-RU")} ₽</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white w-28 text-right">{amount.toLocaleString("ru-RU")} ₽</span>
                       <span className="text-xs text-gray-400 w-10 text-right">{pct}%</span>
                     </div>
                   );
@@ -219,19 +273,19 @@ export default function ExpensesDashboard() {
 
         {/* Project breakdown */}
         {projectExpenseStats.size > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
             <button
               onClick={() => setProjectBreakdownOpen((v) => !v)}
               className="w-full flex items-center justify-between p-5 text-left"
             >
-              <h2 className="text-sm font-bold text-gray-700">Расходы по проектам</h2>
+              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Расходы по проектам</h2>
               <div className="flex items-center gap-3">
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {Array.from(projectExpenseStats.values()).reduce((a, b) => a + b, 0).toLocaleString("ru-RU")} ₽
                 </span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className={`h-4 w-4 text-gray-400 transition-transform ${projectBreakdownOpen ? "rotate-180" : ""}`}
+                  className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${projectBreakdownOpen ? "rotate-180" : ""}`}
                   viewBox="0 0 20 20"
                   fill="currentColor"
                 >
@@ -246,14 +300,14 @@ export default function ExpensesDashboard() {
                   const pct = grandTotal > 0 ? Math.round((amount / grandTotal) * 100) : 0;
                   return (
                     <div key={pid} className="flex items-center gap-3">
-                      <span className="text-sm text-gray-700 flex-1 min-w-0 truncate">{project?.name ?? "Неизвестный"}</span>
-                      <div className="w-24 bg-gray-100 rounded-full h-2 hidden sm:block">
+                      <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0 truncate">{project?.name ?? "Неизвестный"}</span>
+                      <div className="w-24 bg-gray-100 dark:bg-gray-700 rounded-full h-2 hidden sm:block">
                         <div
                           className="bg-indigo-500 h-2 rounded-full transition-all"
                           style={{ width: `${pct}%` }}
                         />
                       </div>
-                      <span className="text-sm font-medium text-gray-900 w-28 text-right">{amount.toLocaleString("ru-RU")} ₽</span>
+                      <span className="text-sm font-medium text-gray-900 dark:text-white w-28 text-right">{amount.toLocaleString("ru-RU")} ₽</span>
                       <span className="text-xs text-gray-400 w-10 text-right">{pct}%</span>
                     </div>
                   );
@@ -263,8 +317,53 @@ export default function ExpensesDashboard() {
           </div>
         )}
 
-        {/* New expense button */}
-        <div className="flex items-center justify-end mb-4">
+        {/* Import result toast */}
+        {importResult && (
+          <div className={`mb-4 p-4 rounded-xl border ${importResult.errors.length > 0 && importResult.inserted === 0 ? "bg-red-50 border-red-200" : importResult.errors.length > 0 ? "bg-yellow-50 border-yellow-200" : "bg-green-50 border-green-200"}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                {importResult.inserted > 0 && (
+                  <p className="text-sm font-medium text-green-800">
+                    ✅ Импортировано: {importResult.inserted} запис{importResult.inserted === 1 ? "ь" : importResult.inserted < 5 ? "и" : "ей"}
+                  </p>
+                )}
+                {importResult.errors.length > 0 && (
+                  <div className="mt-1">
+                    {importResult.errors.map((err, i) => (
+                      <p key={i} className="text-xs text-red-600">{err}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <button
+            onClick={handleDownloadTemplate}
+            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+            title="Скачать шаблон Excel"
+          >
+            📥 Шаблон
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors shadow-sm disabled:opacity-50"
+            title="Импорт расходов из Excel"
+          >
+            {importing ? "⏳ Импорт..." : "📤 Импорт Excel"}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleImportFile}
+            className="hidden"
+          />
           <button
             onClick={() => setEditing("create")}
             className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors shadow-sm"
@@ -275,9 +374,10 @@ export default function ExpensesDashboard() {
 
         {/* Table */}
         <ExpenseTable
-          expenses={expenses}
+          expenses={filteredExpenses}
           projects={projects}
           channels={channels}
+          stores={stores}
           total={total}
           onEdit={(expense) => setEditing(expense)}
           onDelete={handleDelete}

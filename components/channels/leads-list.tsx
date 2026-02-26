@@ -1,22 +1,26 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { Lead, Channel, LeadResult, ContactMethod } from "@/types/dashboard";
+import type { Lead, Channel, LeadResult, ContactMethod, Store, ProductType } from "@/types/dashboard";
 import { contactMethodLabels, leadResultLabels, leadResultColors } from "@/lib/leads-data";
 
 interface LeadsListProps {
   leads: Lead[];
   channels: Channel[];
+  stores?: Store[];
+  productTypes?: ProductType[];
   onEditLead: (lead: Lead) => void;
   onAddLead: () => void;
 }
 
-type SortField = "name" | "channel" | "contactMethod" | "result" | "date" | "note";
+type SortField = "name" | "channel" | "contactMethod" | "result" | "date" | "note" | "store" | "productType";
 type SortDir = "asc" | "desc";
 
 export default function LeadsList({
   leads,
   channels,
+  stores = [],
+  productTypes = [],
   onEditLead,
   onAddLead,
 }: LeadsListProps) {
@@ -31,6 +35,26 @@ export default function LeadsList({
 
   const channelName = (channelId: number): string =>
     channelId === 0 ? "Неизвестен" : (channelMap.get(channelId) ?? "—");
+
+  const storeMap = useMemo(() => {
+    const map = new Map<number, string>();
+    stores.forEach((s) => map.set(s.id, s.name));
+    return map;
+  }, [stores]);
+
+  const storeName = (storeId: number | null | undefined): string =>
+    storeId ? (storeMap.get(storeId) ?? "—") : "—";
+
+  const productTypeMap = useMemo(() => {
+    const map = new Map<number, string>();
+    productTypes.forEach((pt) => map.set(pt.id, pt.name));
+    return map;
+  }, [productTypes]);
+
+  const productTypeNames = (ptIds: number[]): string => {
+    if (ptIds.length === 0) return "—";
+    return ptIds.map((id) => productTypeMap.get(id) ?? "?").join(", ");
+  };
 
   const sorted = useMemo(() => {
     const arr = [...leads];
@@ -60,6 +84,12 @@ export default function LeadsList({
           break;
         case "note":
           cmp = (a.note ?? "").localeCompare(b.note ?? "", "ru");
+          break;
+        case "store":
+          cmp = storeName(a.storeId).localeCompare(storeName(b.storeId), "ru");
+          break;
+        case "productType":
+          cmp = productTypeNames(a.productTypeIds).localeCompare(productTypeNames(b.productTypeIds), "ru");
           break;
       }
       return sortDir === "asc" ? cmp : -cmp;
@@ -143,12 +173,28 @@ export default function LeadsList({
               >
                 Заметка <SortIcon field="note" />
               </th>
+              {stores.length > 0 && (
+                <th
+                  className={`text-left ${thClass}`}
+                  onClick={() => handleSort("store")}
+                >
+                  Точка <SortIcon field="store" />
+                </th>
+              )}
+              {productTypes.length > 0 && (
+                <th
+                  className={`text-left ${thClass}`}
+                  onClick={() => handleSort("productType")}
+                >
+                  Товар <SortIcon field="productType" />
+                </th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center py-8 text-gray-400">
+                <td colSpan={6 + (stores.length > 0 ? 1 : 0) + (productTypes.length > 0 ? 1 : 0)} className="text-center py-8 text-gray-400">
                   Нет лидов
                 </td>
               </tr>
@@ -188,6 +234,16 @@ export default function LeadsList({
                 <td className="px-4 py-3 text-gray-400 max-w-[200px] truncate">
                   {lead.note ?? "—"}
                 </td>
+                {stores.length > 0 && (
+                  <td className="px-4 py-3 text-gray-500">
+                    {storeName(lead.storeId)}
+                  </td>
+                )}
+                {productTypes.length > 0 && (
+                  <td className="px-4 py-3 text-gray-500 max-w-[180px] truncate">
+                    {productTypeNames(lead.productTypeIds)}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

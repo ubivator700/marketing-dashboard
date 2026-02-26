@@ -19,7 +19,7 @@ export default function ExpenseEditModal({
   onDelete,
   onClose,
 }: ExpenseEditModalProps) {
-  const { projects, channels } = useAppContext();
+  const { projects, channels, stores, selectedStoreId } = useAppContext();
   const isCreate = expense === null;
 
   const [name, setName] = useState(expense?.name ?? "");
@@ -28,6 +28,7 @@ export default function ExpenseEditModal({
   const [projectId, setProjectId] = useState<number | null>(expense?.projectId ?? null);
   const [date, setDate] = useState(expense?.date ?? new Date().toISOString().slice(0, 10));
   const [channelId, setChannelId] = useState<number | null>(expense?.channelId ?? null);
+  const [storeId, setStoreId] = useState<number | null>(expense?.storeId ?? selectedStoreId);
   const [error, setError] = useState("");
 
   const handleSave = () => {
@@ -41,6 +42,7 @@ export default function ExpenseEditModal({
       date,
       projectId,
       channelId,
+      storeId,
     });
   };
 
@@ -107,6 +109,21 @@ export default function ExpenseEditModal({
             ))}
           </select>
         </div>
+        {stores.length > 0 && (
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Точка</label>
+            <select
+              value={storeId ?? ""}
+              onChange={(e) => setStoreId(e.target.value ? Number(e.target.value) : null)}
+              className={selectClass}
+            >
+              <option value="">Без точки</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mt-6">

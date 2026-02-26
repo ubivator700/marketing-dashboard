@@ -5,6 +5,7 @@ import type {
   Project,
   ProjectTask,
   StandaloneTask,
+  RecurringTask,
   Channel,
   Employee,
   StandaloneTaskStatus,
@@ -14,6 +15,8 @@ import {
   projectTaskStatusLabels,
   projectTaskStatusColors,
 } from "@/lib/projects-data";
+import { generateInstances } from "@/lib/recurring-utils";
+import { layoutOverlappingItems, type LayoutItem } from "@/lib/calendar-layout";
 
 // ─── Types ───────────────────────────────────────────────────────────
 type CalendarView = "week" | "day";
@@ -21,6 +24,7 @@ type CalendarView = "week" | "day";
 interface ProjectsCalendarTabProps {
   projects: Project[];
   standaloneTasks: StandaloneTask[];
+  recurringTasks?: RecurringTask[];
   channels: Channel[];
   employees: Employee[];
   currentUser: AuthUser | null;
@@ -48,7 +52,7 @@ interface CalendarItem {
   status: string;
   statusLabel: string;
   statusColor: string;
-  source: "project" | "standalone";
+  source: "project" | "standalone" | "recurring";
   projectName?: string;
   channelName?: string;
   color: string; // block color
@@ -118,9 +122,10 @@ const standaloneTaskStatusColors: Record<StandaloneTaskStatus, string> = {
   done: "bg-green-100 text-green-700",
 };
 
-// Color palette for project tasks vs standalone tasks
+// Color palette for project tasks vs standalone tasks vs recurring tasks
 const PROJECT_TASK_COLOR = "#6366f1"; // indigo-500
 const STANDALONE_TASK_COLOR = "#14b8a6"; // teal-500
+const RECURRING_TASK_COLOR = "#f59e0b"; // amber-500
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 function getWeekStart(date: Date): Date {
@@ -184,6 +189,7 @@ function minutesToTimeString(minutes: number): string {
 export default function ProjectsCalendarTab({
   projects,
   standaloneTasks,
+  recurringTasks = [],
   channels,
   employees,
   currentUser,
@@ -204,7 +210,9 @@ export default function ProjectsCalendarTab({
   const allDayGridRef = useRef<HTMLDivElement>(null);
 
   // ─── Filters (defaults) ───
-  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(
+    () => currentUser?.employeeName ?? null
+  );
   const [filterProjectId, setFilterProjectId] = useState<number | null>(null);
   const [filterChannelId, setFilterChannelId] = useState<number | null>(null);
 
@@ -332,10 +340,48 @@ export default function ProjectsCalendarTab({
       });
     }
 
+    // Recurring tasks — generate virtual instances for visible range
+    if (recurringTasks.length > 0 && filterProjectId === null) {
+      // Compute a generous range: 2 weeks before weekStart to 2 weeks after
+      const rangeStart = new Date(weekStart);
+      rangeStart.setDate(rangeStart.getDate() - 14);
+      const rangeEnd = new Date(weekStart);
+      rangeEnd.setDate(rangeEnd.getDate() + 28);
+      const startStr = dateKeyFromDate(rangeStart);
+      const endStr = dateKeyFromDate(rangeEnd);
+
+      for (const rt of recurringTasks) {
+        if (filterAssignee && rt.assignee !== filterAssignee) continue;
+        if (filterChannelId !== null && rt.channelId !== filterChannelId) continue;
+
+        const instances = generateInstances(rt, startStr, endStr, employeeColorMap);
+        for (const inst of instances) {
+          items.push({
+            id: inst.id,
+            name: inst.name,
+            description: inst.description,
+            assignee: inst.assignee,
+            deadline: inst.deadline,
+            dueTime: inst.dueTime,
+            duration: inst.duration,
+            status: inst.status,
+            statusLabel: inst.statusLabel,
+            statusColor: inst.statusColor,
+            source: "recurring",
+            projectName: undefined,
+            channelName: rt.channelId ? channelNameMap.get(rt.channelId) : undefined,
+            color: inst.color,
+          });
+        }
+      }
+    }
+
     return items;
   }, [
     projects,
     standaloneTasks,
+    recurringTasks,
+    weekStart,
     filterAssignee,
     filterProjectId,
     filterChannelId,
@@ -735,7 +781,7 @@ export default function ProjectsCalendarTab({
               style={{ backgroundColor: selectedItem.color }}
             />
             <span className="text-sm font-medium text-gray-700">
-              {selectedItem.source === "project" ? "Проектная задача" : "Отдельная задача"}
+              {selectedItem.source === "project" ? "Проектная задача" : selectedItem.source === "recurring" ? "Регулярная задача" : "Отдельная задача"}
             </span>
           </div>
           <button
@@ -757,7 +803,7 @@ export default function ProjectsCalendarTab({
             {selectedItem.statusLabel}
           </span>
           <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">
-            {selectedItem.source === "project" ? "Проект" : "Задача"}
+            {selectedItem.source === "project" ? "Проект" : selectedItem.source === "recurring" ? "Регулярная" : "Задача"}
           </span>
         </div>
 
@@ -801,7 +847,7 @@ export default function ProjectsCalendarTab({
             >
               <span
                 className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: item.source === "project" ? PROJECT_TASK_COLOR : STANDALONE_TASK_COLOR }}
+                style={{ backgroundColor: item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR }}
               />
               <span className="truncate text-gray-700">{item.name}</span>
             </button>
@@ -894,7 +940,7 @@ export default function ProjectsCalendarTab({
             className="w-1.5 h-1.5 rounded-full flex-shrink-0"
             style={{
               backgroundColor:
-                item.source === "project" ? PROJECT_TASK_COLOR : STANDALONE_TASK_COLOR,
+                item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR,
             }}
           />
           <span
@@ -916,12 +962,24 @@ export default function ProjectsCalendarTab({
     );
   }
 
-  // ─── Render: Timed task blocks for a given column ───
+  // ─── Render: Timed task blocks for a given column (with overlap layout) ───
   function renderTimedBlocks(
     dateKey: string,
     gridColumn: number
   ) {
     const items = getTimedItems(dateKey);
+
+    // Build layout items for overlap calculation
+    const layoutItems: LayoutItem[] = [];
+    for (const item of items) {
+      const [h, m] = item.dueTime!.split(":").map(Number);
+      const startMin = h * 60 + m;
+      const dur = item.duration || 60;
+      if (startMin + dur < START_HOUR * 60 || startMin >= END_HOUR * 60) continue;
+      layoutItems.push({ id: item.id, startMin, endMin: startMin + dur });
+    }
+    const layoutMap = layoutOverlappingItems(layoutItems);
+
     return items.map((item) => {
       const [h, m] = item.dueTime!.split(":").map(Number);
       let taskStartMin = h * 60 + m;
@@ -952,11 +1010,18 @@ export default function ProjectsCalendarTab({
       const isInteracting = isDraggingThis || isResizingThis;
       const HANDLE_HEIGHT = 6; // px — resize handle thickness
 
+      // Overlap layout: compute left/width percentages
+      const layout = layoutMap.get(item.id);
+      const colCount = layout?.totalColumns ?? 1;
+      const colIndex = layout?.column ?? 0;
+      const widthPct = `${(1 / colCount) * 100}%`;
+      const leftPct = `${(colIndex / colCount) * 100}%`;
+
       return (
         <div
           key={item.id}
           onPointerDown={(e) => handleDragStart(e, item, dateKey)}
-          className={`absolute mx-0.5 rounded-lg text-left overflow-hidden hover:brightness-95 transition-all border border-white/50 touch-none select-none group/block ${
+          className={`absolute rounded-lg text-left overflow-hidden hover:brightness-95 transition-all border border-white/50 touch-none select-none group/block ${
             isDraggingThis && dragState?.hasMoved ? "opacity-40" : ""
           } ${isResizingThis && resizeState?.hasMoved ? "ring-2 ring-indigo-400/50" : ""}`}
           style={{
@@ -964,8 +1029,8 @@ export default function ProjectsCalendarTab({
             gridRow: "1 / -1",
             top: Math.max(topPx, 0),
             height: clampedHeight,
-            left: 2,
-            right: 2,
+            left: leftPct,
+            width: widthPct,
             backgroundColor: item.color + "20",
             borderLeft: `3px solid ${item.color}`,
             cursor: resizeState ? "ns-resize" : dragState ? "grabbing" : "grab",
@@ -988,7 +1053,7 @@ export default function ProjectsCalendarTab({
                 className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                 style={{
                   backgroundColor:
-                    item.source === "project" ? PROJECT_TASK_COLOR : STANDALONE_TASK_COLOR,
+                    item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR,
                 }}
               />
               <span
@@ -1445,6 +1510,13 @@ export default function ProjectsCalendarTab({
             style={{ backgroundColor: STANDALONE_TASK_COLOR }}
           />
           <span>Отдельные задачи</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span
+            className="w-2.5 h-2.5 rounded-full"
+            style={{ backgroundColor: RECURRING_TASK_COLOR }}
+          />
+          <span>Регулярные задачи</span>
         </div>
       </div>
 

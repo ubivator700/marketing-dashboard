@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-import type { Project, Stage, ProjectTask, StandaloneTask } from "@/types/dashboard";
+import type { Project, Stage, ProjectTask, StandaloneTask, RecurringTask } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -37,6 +37,7 @@ import ProjectEditModal from "./project-edit-modal";
 import StageEditModal from "./stage-edit-modal";
 import ProjectTaskEditModal from "./project-task-edit-modal";
 import StandaloneTasksTab from "./standalone-tasks-tab";
+import RecurringTasksTab from "./recurring-tasks-tab";
 import ProjectsCalendarTab from "./projects-calendar-tab";
 
 // ─── Modal state types ───
@@ -44,10 +45,10 @@ interface EditProjectModal { project: Project | null }
 interface EditStageModal { stage: Stage | null; projectId: number; projectName: string }
 interface EditTaskModal { task: ProjectTask | null; projectId: number; stageId: number; stageName: string }
 
-type ProjectsTabId = "projects" | "standalone" | "calendar";
+type ProjectsTabId = "projects" | "standalone" | "recurring" | "calendar";
 
 export default function ProjectsDashboard() {
-  const { projects, setProjects, expenses, setExpenses, channels, employees, standaloneTasks, setStandaloneTasks } = useAppContext();
+  const { projects, setProjects, expenses, setExpenses, channels, employees, standaloneTasks, setStandaloneTasks, recurringTasks, setRecurringTasks } = useAppContext();
   const { user } = useAuth();
 
   // Prevent hydration mismatch from @dnd-kit attributes
@@ -211,9 +212,29 @@ export default function ProjectsDashboard() {
     [setStandaloneTasks]
   );
 
+  // ─── Recurring Task CRUD ───
+  const handleRecurringTaskSave = useCallback(
+    (task: RecurringTask) => {
+      setRecurringTasks((prev) => {
+        const exists = prev.some((t) => t.id === task.id);
+        if (exists) return prev.map((t) => (t.id === task.id ? task : t));
+        return [...prev, task];
+      });
+    },
+    [setRecurringTasks]
+  );
+
+  const handleRecurringTaskDelete = useCallback(
+    (taskId: number) => {
+      setRecurringTasks((prev) => prev.filter((t) => t.id !== taskId));
+    },
+    [setRecurringTasks]
+  );
+
   const tabs: { id: ProjectsTabId; label: string }[] = [
     { id: "projects", label: "Проекты" },
     { id: "standalone", label: "Текущие задачи" },
+    { id: "recurring", label: "Регулярные" },
     { id: "calendar", label: "Календарь" },
   ];
 
@@ -347,10 +368,21 @@ export default function ProjectsDashboard() {
           />
         )}
 
+        {tab === "recurring" && (
+          <RecurringTasksTab
+            tasks={recurringTasks}
+            channels={channels}
+            employees={employees}
+            onSave={handleRecurringTaskSave}
+            onDelete={handleRecurringTaskDelete}
+          />
+        )}
+
         {tab === "calendar" && (
           <ProjectsCalendarTab
             projects={projects}
             standaloneTasks={standaloneTasks}
+            recurringTasks={recurringTasks}
             channels={channels}
             employees={employees}
             currentUser={user}

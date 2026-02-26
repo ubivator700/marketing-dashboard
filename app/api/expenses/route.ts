@@ -29,6 +29,7 @@ export async function GET() {
     date: formatDate(r.date),
     projectId: r.project_id,
     channelId: r.channel_id,
+    storeId: r.store_id ?? null,
   }));
 
   return NextResponse.json(expenses);
@@ -42,19 +43,19 @@ export async function POST(request: NextRequest) {
   if (writeError) return writeError;
 
   const body = await request.json();
-  const { id, name, amount, responsible, date, projectId, channelId } = body;
+  const { id, name, amount, responsible, date, projectId, channelId, storeId } = body;
 
   let insertId: number;
   if (id) {
     await pool.query(
-      "INSERT INTO expenses (id, name, amount, responsible, date, project_id, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [id, name, amount, responsible, date, projectId ?? null, channelId ?? null]
+      "INSERT INTO expenses (id, name, amount, responsible, date, project_id, channel_id, store_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [id, name, amount, responsible, date, projectId ?? null, channelId ?? null, storeId ?? null]
     );
     insertId = id;
   } else {
     const [result] = await pool.query(
-      "INSERT INTO expenses (name, amount, responsible, date, project_id, channel_id) VALUES (?, ?, ?, ?, ?, ?)",
-      [name, amount, responsible, date, projectId ?? null, channelId ?? null]
+      "INSERT INTO expenses (name, amount, responsible, date, project_id, channel_id, store_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [name, amount, responsible, date, projectId ?? null, channelId ?? null, storeId ?? null]
     );
     insertId = (result as { insertId: number }).insertId;
   }
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest) {
       date,
       projectId: projectId ?? null,
       channelId: channelId ?? null,
+      storeId: storeId ?? null,
     },
     { status: 201 }
   );

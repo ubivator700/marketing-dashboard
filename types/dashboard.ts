@@ -133,6 +133,27 @@ export interface Expense {
   date: string; // "YYYY-MM-DD"
   projectId: number | null;
   channelId: number | null;
+  storeId: number | null;
+}
+
+// ─── Stores (торговые точки) ────────────────────────────────────
+
+export interface Store {
+  id: number;
+  name: string;
+  tbu: number; // точка безубыточности (₽)
+}
+
+// ─── Product Types (типы товаров) ──────────────────────────────
+
+export type ProductCategory = "doors" | "windows" | "floors" | "other";
+
+export interface ProductType {
+  id: number;
+  name: string;
+  category: ProductCategory;
+  avgCheck: number;
+  avgMarkup: number;
 }
 
 // ─── Channels & Leads ────────────────────────────────────────────
@@ -153,7 +174,7 @@ export interface Channel {
   tasks: ChannelTask[];
 }
 
-export type ContactMethod = "salon" | "phone" | "social";
+export type ContactMethod = "salon" | "phone" | "social" | "old_request";
 export type LeadResult = "measurement" | "sale" | "deferred";
 
 export interface Lead {
@@ -164,6 +185,8 @@ export interface Lead {
   result: LeadResult;
   date: string;
   note?: string;
+  storeId: number | null;
+  productTypeIds: number[];
 }
 
 // ─── Standalone Tasks (not tied to projects) ────────────────────
@@ -207,9 +230,28 @@ export interface Idea {
   date: string;
 }
 
+// ─── Recurring Tasks ─────────────────────────────────────────────
+
+export type RecurrenceType = "daily" | "weekly" | "monthly";
+export type RecurringTaskStatus = "active" | "paused";
+
+export interface RecurringTask {
+  id: number;
+  name: string;
+  description: string;
+  assignee: string;
+  recurrenceType: RecurrenceType;
+  recurrenceInterval: number;  // every N days/weeks/months
+  recurrenceDays: string;      // "0,2,4" for weekly (Mon,Wed,Fri); "15" for monthly (day of month); "" for daily
+  channelId: number | null;
+  dueTime?: string;            // "HH:MM"
+  duration?: number;           // minutes
+  status: RecurringTaskStatus;
+}
+
 // ─── Navigation ───────────────────────────────────────────────────
 
-export type PageId = "dashboard" | "projects" | "expenses" | "channels" | "leads" | "organization" | "overview" | "content";
+export type PageId = "dashboard" | "projects" | "expenses" | "channels" | "leads" | "organization" | "overview" | "content" | "stores" | "products";
 
 export interface PageDefinition {
   id: PageId;

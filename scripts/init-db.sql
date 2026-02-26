@@ -19,9 +19,13 @@ DROP TABLE IF EXISTS ideas;
 DROP TABLE IF EXISTS posts;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS recurring_tasks;
 DROP TABLE IF EXISTS standalone_tasks;
 DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS lead_product_types;
 DROP TABLE IF EXISTS leads;
+DROP TABLE IF EXISTS product_types;
+DROP TABLE IF EXISTS stores;
 DROP TABLE IF EXISTS channel_tasks;
 DROP TABLE IF EXISTS channels;
 DROP TABLE IF EXISTS project_tasks;
@@ -169,6 +173,28 @@ CREATE TABLE channel_tasks (
 ) ENGINE=InnoDB;
 
 -- ═══════════════════════════════════════════════════════
+-- Stores (торговые точки)
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE stores (
+  id   BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  tbu  INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════════════════════════
+-- Product Types (типы товаров)
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE product_types (
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name       VARCHAR(200) NOT NULL,
+  category   ENUM('doors','windows','floors','other') NOT NULL DEFAULT 'other',
+  avg_check  INT NOT NULL DEFAULT 0,
+  avg_markup INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ═══════════════════════════════════════════════════════
 -- Leads
 -- ═══════════════════════════════════════════════════════
 
@@ -176,12 +202,26 @@ CREATE TABLE leads (
   id             BIGINT AUTO_INCREMENT PRIMARY KEY,
   name           VARCHAR(200)                              NOT NULL,
   channel_id     BIGINT                                    NULL,
-  contact_method ENUM('salon','phone','social')            NOT NULL,
+  contact_method ENUM('salon','phone','social','old_request') NOT NULL,
   result         ENUM('measurement','sale','deferred')     NOT NULL,
   date           DATE                                      NOT NULL,
   note           TEXT                                      NULL,
-  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE SET NULL
+  store_id       BIGINT                                    NULL,
+  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE SET NULL,
+  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════════════════════════
+-- Lead ↔ Product Types (many-to-many)
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE lead_product_types (
+  lead_id         BIGINT NOT NULL,
+  product_type_id BIGINT NOT NULL,
+  PRIMARY KEY (lead_id, product_type_id),
+  FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE,
+  FOREIGN KEY (product_type_id) REFERENCES product_types(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ═══════════════════════════════════════════════════════
 -- Expenses
@@ -195,8 +235,10 @@ CREATE TABLE expenses (
   date        DATE         NOT NULL,
   project_id  BIGINT       NULL,
   channel_id  BIGINT       NULL,
+  store_id    BIGINT       NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id)  ON DELETE SET NULL,
-  FOREIGN KEY (channel_id) REFERENCES channels(id)  ON DELETE SET NULL
+  FOREIGN KEY (channel_id) REFERENCES channels(id)  ON DELETE SET NULL,
+  FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- ═══════════════════════════════════════════════════════
@@ -213,6 +255,25 @@ CREATE TABLE standalone_tasks (
   duration    INT          NULL,
   status      ENUM('todo','in_progress','done') NOT NULL DEFAULT 'todo',
   channel_id  BIGINT       NULL,
+  FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════════════════════════
+-- Recurring Tasks
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE recurring_tasks (
+  id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name                VARCHAR(500)                        NOT NULL,
+  description         TEXT                                NULL,
+  assignee            VARCHAR(100)                        NOT NULL DEFAULT '',
+  recurrence_type     ENUM('daily','weekly','monthly')    NOT NULL,
+  recurrence_interval INT                                 NOT NULL DEFAULT 1,
+  recurrence_days     VARCHAR(20)                         NULL,
+  channel_id          BIGINT                              NULL,
+  due_time            VARCHAR(5)                          NULL,
+  duration            INT                                 NULL,
+  status              ENUM('active','paused')             NOT NULL DEFAULT 'active',
   FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -384,7 +445,8 @@ INSERT INTO settings (`key`, `value`) VALUES
   ('averageCheck', '8000'),
   ('monthlyLeadPlan', '200'),
   ('dailyLeadPlan', '7'),
-  ('monthlyBudget', '0');
+  ('monthlyBudget', '0'),
+  ('taxCoefficient', '0.07');
 
 -- Default admin user (password: admin123)
 INSERT INTO users (username, password_hash, employee_name, role) VALUES

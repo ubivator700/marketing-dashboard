@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/lib/theme-context";
 
 // ─── Nav structure ──────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ interface NavItem {
   icon: string;
   href: string;
   children?: { label: string; icon: string; href: string }[];
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -28,7 +30,14 @@ const NAV_ITEMS: NavItem[] = [
     children: [{ label: "Лиды", icon: "👥", href: "/leads" }],
   },
   { label: "Расходы", icon: "💰", href: "/expenses" },
-  { label: "Организация", icon: "🏢", href: "/organization" },
+  {
+    label: "Организация", icon: "🏢", href: "/organization",
+    adminOnly: true,
+    children: [
+      { label: "Магазины", icon: "🏪", href: "/stores" },
+      { label: "Товары", icon: "📦", href: "/products" },
+    ],
+  },
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -40,9 +49,9 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-red-100 text-red-700",
-  manager: "bg-blue-100 text-blue-700",
-  viewer: "bg-gray-100 text-gray-600",
+  admin: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  manager: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  viewer: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
 };
 
 function isItemActive(item: NavItem, pathname: string): boolean {
@@ -77,14 +86,14 @@ function NavDropdown({ item, pathname }: { item: NavItem; pathname: string }) {
         className={`flex items-center rounded-lg transition-all ${
           active
             ? "bg-indigo-600 shadow-md"
-            : "hover:bg-gray-100"
+            : "hover:bg-gray-100 dark:hover:bg-gray-800"
         }`}
       >
         <Link
           href={item.href}
           onClick={() => setOpen(false)}
           className={`pl-4 pr-1 py-2 text-sm font-medium transition-colors ${
-            active ? "text-white" : "text-gray-600"
+            active ? "text-white" : "text-gray-600 dark:text-gray-300"
           }`}
         >
           {item.icon} {item.label}
@@ -92,7 +101,7 @@ function NavDropdown({ item, pathname }: { item: NavItem; pathname: string }) {
         <button
           onClick={() => setOpen((v) => !v)}
           className={`pr-3 pl-1 py-2 transition-colors ${
-            active ? "text-white" : "text-gray-600"
+            active ? "text-white" : "text-gray-600 dark:text-gray-300"
           }`}
           aria-label={`${item.label} меню`}
         >
@@ -108,7 +117,7 @@ function NavDropdown({ item, pathname }: { item: NavItem; pathname: string }) {
         </button>
       </div>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 min-w-[160px]">
+        <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700 py-1 z-50 min-w-[160px]">
           {item.children!.map((child) => (
             <Link
               key={child.href}
@@ -116,8 +125,8 @@ function NavDropdown({ item, pathname }: { item: NavItem; pathname: string }) {
               onClick={() => setOpen(false)}
               className={`block px-4 py-2 text-sm transition-colors ${
                 pathname.startsWith(child.href)
-                  ? "bg-indigo-50 text-indigo-700 font-medium"
-                  : "text-gray-700 hover:bg-gray-50"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               }`}
             >
               {child.icon} {child.label}
@@ -139,7 +148,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
         active
           ? "bg-indigo-600 text-white shadow-md"
-          : "text-gray-600 hover:bg-gray-100"
+          : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
       }`}
     >
       {item.icon} {item.label}
@@ -154,11 +163,13 @@ function MobileDrawer({
   onClose,
   pathname,
   isAdmin,
+  userRole,
 }: {
   open: boolean;
   onClose: () => void;
   pathname: string;
   isAdmin: boolean;
+  userRole: string;
 }) {
   // Close on route change
   useEffect(() => {
@@ -172,18 +183,18 @@ function MobileDrawer({
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       {/* Drawer panel */}
-      <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl overflow-y-auto">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-sm font-bold text-gray-900">Навигация</span>
+      <div className="absolute left-0 top-0 bottom-0 w-64 bg-white dark:bg-gray-900 shadow-xl overflow-y-auto">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+          <span className="text-sm font-bold text-gray-900 dark:text-white">Навигация</span>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xl leading-none"
           >
             {"\u00D7"}
           </button>
         </div>
         <nav className="py-2">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => !item.adminOnly || userRole === "admin").map((item) => {
             const active = isItemActive(item, pathname);
             return (
               <div key={item.href}>
@@ -192,8 +203,8 @@ function MobileDrawer({
                   onClick={onClose}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                     active && !item.children?.some((c) => pathname.startsWith(c.href))
-                      ? "bg-indigo-50 text-indigo-700"
-                      : "text-gray-700 hover:bg-gray-50"
+                      ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                   }`}
                 >
                   <span>{item.icon}</span>
@@ -206,8 +217,8 @@ function MobileDrawer({
                     onClick={onClose}
                     className={`flex items-center gap-2 pl-10 pr-4 py-2.5 text-sm transition-colors ${
                       pathname.startsWith(child.href)
-                        ? "bg-indigo-50 text-indigo-700 font-medium"
-                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                        ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium"
+                        : "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200"
                     }`}
                   >
                     <span>{child.icon}</span>
@@ -223,8 +234,8 @@ function MobileDrawer({
               onClick={onClose}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
                 pathname === "/admin"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-700 hover:bg-gray-50"
+                  ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
               }`}
             >
               <span>⚙️</span>
@@ -242,6 +253,7 @@ function MobileDrawer({
 export default function GlobalNav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -250,14 +262,14 @@ export default function GlobalNav() {
 
   return (
     <>
-      <nav className="bg-white border-b border-gray-200 shadow-sm">
+      <nav className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center h-14">
             {/* Left section: hamburger (mobile) / spacer (desktop) */}
             <div className="flex-1 flex items-center">
               <button
                 onClick={() => setDrawerOpen(true)}
-                className="md:hidden p-2 -ml-2 text-gray-600 hover:text-gray-900"
+                className="md:hidden p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 aria-label="Открыть меню"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -268,7 +280,7 @@ export default function GlobalNav() {
 
             {/* Center: Desktop nav items */}
             <div className="hidden md:flex items-center gap-1">
-              {NAV_ITEMS.map((item) =>
+              {NAV_ITEMS.filter((item) => !item.adminOnly || user.role === "admin").map((item) =>
                 item.children ? (
                   <NavDropdown key={item.href} item={item} pathname={pathname} />
                 ) : (
@@ -281,7 +293,7 @@ export default function GlobalNav() {
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     pathname === "/admin"
                       ? "bg-indigo-600 text-white shadow-md"
-                      : "text-gray-600 hover:bg-gray-100"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                   }`}
                 >
                   Админ
@@ -289,12 +301,28 @@ export default function GlobalNav() {
               )}
             </div>
 
-            {/* Right section: User info + logout */}
+            {/* Right section: Theme toggle + User info + logout */}
             <div className="flex-1 flex items-center justify-end gap-3">
+              {/* Theme toggle */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                title={theme === "dark" ? "Светлая тема" : "Тёмная тема"}
+              >
+                {theme === "dark" ? (
+                  <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
+                  </svg>
+                )}
+              </button>
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[user.role]}`}>
                 {ROLE_LABELS[user.role]}
               </span>
-              <span className="text-sm text-gray-700 font-medium hidden sm:inline">
+              <span className="text-sm text-gray-700 dark:text-gray-300 font-medium hidden sm:inline">
                 {user.employeeName || user.username}
               </span>
               <button
@@ -314,6 +342,7 @@ export default function GlobalNav() {
         onClose={closeDrawer}
         pathname={pathname}
         isAdmin={user.role === "admin"}
+        userRole={user.role}
       />
     </>
   );

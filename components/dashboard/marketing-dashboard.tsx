@@ -250,24 +250,24 @@ export default function MarketingDashboard() {
   const todayLabel = now.toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-6">
 
         {/* Page title */}
         <div className="mb-6">
-          <h1 className="text-2xl font-black text-gray-900">Дашборд</h1>
-          <p className="text-sm text-gray-500 mt-1 capitalize">{todayLabel}</p>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white dark:text-white">Дашборд</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 capitalize">{todayLabel}</p>
         </div>
 
         {/* Tab switcher */}
         <div className="mb-6">
-          <div className="flex items-center gap-1 bg-white rounded-xl p-1 border border-gray-200 shadow-sm w-fit">
+          <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-xl p-1 border border-gray-200 dark:border-gray-700 shadow-sm w-fit">
             <button
               onClick={() => setTab("today")}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 tab === "today"
                   ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               }`}
             >
               Сегодня
@@ -277,7 +277,7 @@ export default function MarketingDashboard() {
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 tab === "month"
                   ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               }`}
             >
               Месяц
@@ -290,23 +290,23 @@ export default function MarketingDashboard() {
             ════════════════════════════════════════════════════════════════ */}
         {tab === "today" && (
           <div>
-          <p className="text-sm font-medium text-gray-500 mb-4 capitalize">{todayLabel}</p>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4 capitalize">{todayLabel}</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             {/* Panel 1: Задачи сотрудника */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                 Задачи сотрудника
               </p>
               {!employeeName ? (
-                <p className="text-sm text-gray-400 py-4 text-center">Пользователь не привязан к сотруднику</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Пользователь не привязан к сотруднику</p>
               ) : myTodayDeptTasks.length === 0 && myTodayProjectTasks.length === 0 && myTodayStandaloneTasks.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">Нет задач на сегодня</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет задач на сегодня</p>
               ) : (
                 <div className="space-y-1 ">
                   {/* Department tasks */}
                   {myTodayDeptTasks.map((item) => (
-                    <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
+                    <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
                       <button
                         onClick={() => toggleDeptTask(item.deptId, item.task.id)}
                         className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
@@ -322,13 +322,13 @@ export default function MarketingDashboard() {
                           </svg>
                         )}
                       </button>
-                      <span className={`text-sm text-gray-800 flex-1 ${item.task.status === "done" ? "line-through text-gray-400" : ""}`}>{item.task.text}</span>
+                      <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${item.task.status === "done" ? "line-through text-gray-400" : ""}`}>{item.task.text}</span>
                       <span className="text-[10px] text-gray-400 flex-shrink-0">{item.deptName}</span>
                     </div>
                   ))}
                   {/* Project tasks */}
                   {myTodayProjectTasks.map((item) => (
-                    <div key={`proj-${item.taskId}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50 ${item.status === "done" ? "opacity-60" : ""}`}>
+                    <div key={`proj-${item.taskId}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/20 ${item.status === "done" ? "opacity-60" : ""}`}>
                       <button
                         onClick={() => toggleProjectTask(item.projectId, item.stageId, item.taskId)}
                         className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
@@ -344,13 +344,13 @@ export default function MarketingDashboard() {
                           </svg>
                         )}
                       </button>
-                      <span className={`text-sm text-gray-800 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
+                      <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
                       <span className="text-[10px] text-indigo-500 flex-shrink-0">{item.projectName}</span>
                     </div>
                   ))}
                   {/* Standalone tasks */}
                   {myTodayStandaloneTasks.map((task) => (
-                    <div key={`standalone-${task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/50 ${task.status === "done" ? "opacity-60" : ""}`}>
+                    <div key={`standalone-${task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50/50 dark:bg-amber-900/20 ${task.status === "done" ? "opacity-60" : ""}`}>
                       <button
                         onClick={() => toggleStandaloneTask(task.id)}
                         className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
@@ -366,7 +366,7 @@ export default function MarketingDashboard() {
                           </svg>
                         )}
                       </button>
-                      <span className={`text-sm text-gray-800 flex-1 ${task.status === "done" ? "line-through text-gray-400" : ""}`}>{task.name}</span>
+                      <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${task.status === "done" ? "line-through text-gray-400" : ""}`}>{task.name}</span>
                       <span className="text-[10px] text-amber-500 flex-shrink-0">Задача</span>
                     </div>
                   ))}
@@ -380,15 +380,15 @@ export default function MarketingDashboard() {
             </div>
 
             {/* Panel 2: Лиды за сегодня */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                 Лиды за сегодня
               </p>
 
               {/* Daily plan completion bar */}
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-semibold text-gray-700">
+                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                     {todayLeads.length} / {dailyLeadPlan}
                   </span>
                   <span className={`text-xs font-bold ${
@@ -397,7 +397,7 @@ export default function MarketingDashboard() {
                     {dailyPct}%
                   </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
                   <div
                     className={`h-2.5 rounded-full transition-all duration-500 ${
                       dailyPct >= 100 ? "bg-green-500" : dailyPct >= 50 ? "bg-amber-500" : "bg-red-500"
@@ -410,12 +410,12 @@ export default function MarketingDashboard() {
 
               {/* Leads by channel */}
               {todayLeadsByChannel.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">Нет лидов за сегодня</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет лидов за сегодня</p>
               ) : (
                 <div className="space-y-1.5">
                   {todayLeadsByChannel.map((item) => (
-                    <div key={item.channelId} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50">
-                      <span className="text-sm text-gray-800 truncate">{item.channelName}</span>
+                    <div key={item.channelId} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+                      <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.channelName}</span>
                       <span className="text-sm font-bold text-indigo-600 flex-shrink-0 ml-2">{item.count}</span>
                     </div>
                   ))}
@@ -424,19 +424,19 @@ export default function MarketingDashboard() {
             </div>
 
             {/* Panel 3: Расходы сотрудника за сегодня */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                 Расходы сотрудника за сегодня
               </p>
               {!employeeName ? (
-                <p className="text-sm text-gray-400 py-4 text-center">Пользователь не привязан к сотруднику</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Пользователь не привязан к сотруднику</p>
               ) : myTodayExpenses.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">Нет расходов за сегодня</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет расходов за сегодня</p>
               ) : (
                 <div className="space-y-1.5">
                   {myTodayExpenses.map((expense) => (
-                    <div key={expense.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50">
-                      <span className="text-sm text-gray-800 flex-1">{expense.name}</span>
+                    <div key={expense.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+                      <span className="text-sm text-gray-800 dark:text-gray-200 flex-1">{expense.name}</span>
                       <span className="text-sm font-semibold text-red-500 flex-shrink-0 ml-2">
                         {expense.amount.toLocaleString("ru-RU")} ₽
                       </span>
@@ -445,7 +445,7 @@ export default function MarketingDashboard() {
                 </div>
               )}
               {employeeName && myTodayExpenses.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
                   <span className="text-xs text-gray-500 font-medium">Итого</span>
                   <span className="text-sm font-bold text-red-600">
                     {myTodayExpensesTotal.toLocaleString("ru-RU")} ₽
@@ -464,7 +464,7 @@ export default function MarketingDashboard() {
           <div>
             <div className="flex items-center gap-3 mb-5">
               <div className="w-1.5 h-7 rounded-full bg-emerald-500" />
-              <h2 className="text-lg font-black text-gray-900 capitalize">{monthLabel}</h2>
+              <h2 className="text-lg font-black text-gray-900 dark:text-white capitalize">{monthLabel}</h2>
             </div>
 
             {/* KPI cards row */}
@@ -478,24 +478,24 @@ export default function MarketingDashboard() {
                 color={monthlyPct >= 100 ? "#10b981" : monthlyPct >= 50 ? "#f59e0b" : "#ef4444"}
               />
               {/* Revenue */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 font-semibold">Доходы</p>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Доходы</p>
                 <p className="text-2xl font-black text-green-600">
                   {monthRevenue.toLocaleString("ru-RU")}
                   <span className="text-sm font-normal text-gray-400 ml-1">₽</span>
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
                   {monthLeads.filter((l) => l.result === "sale").length} продаж · {monthLeads.filter((l) => l.result === "measurement").length} замеров
                 </p>
               </div>
               {/* Expenses */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 font-semibold">Расходы (общие)</p>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Расходы (общие)</p>
                 <p className="text-2xl font-black text-red-500">
                   {totalExpAll.toLocaleString("ru-RU")}
                   <span className="text-sm font-normal text-gray-400 ml-1">₽</span>
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1">
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
                   Чистая прибыль:{" "}
                   <span className={monthRevenue - totalExpAll >= 0 ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
                     {(monthRevenue - totalExpAll).toLocaleString("ru-RU")} ₽
@@ -503,10 +503,10 @@ export default function MarketingDashboard() {
                 </p>
               </div>
               {/* Tasks summary */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 font-semibold">Задачи за месяц</p>
-                <p className="text-2xl font-black text-gray-900">{monthTasks.length + monthProjectTasks.length}</p>
-                <p className="text-[11px] text-gray-400 mt-1">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Задачи за месяц</p>
+                <p className="text-2xl font-black text-gray-900 dark:text-white">{monthTasks.length + monthProjectTasks.length}</p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
                   {monthTasks.filter((t) => t.task.status === "done").length + monthProjectTasks.filter((t) => t.status === "done").length} выполнено · {monthTasks.filter((t) => t.task.status === "in_progress").length + monthProjectTasks.filter((t) => t.status === "in_progress").length} в работе
                 </p>
               </div>
@@ -515,12 +515,12 @@ export default function MarketingDashboard() {
             {/* Three blocks: projects + tasks + employees */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Active projects */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                   Актуальные проекты ({activeProjects.length})
                 </p>
                 {activeProjects.length === 0 ? (
-                  <p className="text-sm text-gray-400 py-4 text-center">Нет активных проектов</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет активных проектов</p>
                 ) : (
                   <div className="space-y-2 ">
                     {activeProjects.map((project) => {
@@ -535,14 +535,14 @@ export default function MarketingDashboard() {
                         <Link
                           key={project.id}
                           href={`/projects/${project.id}`}
-                          className="block px-3 py-3 rounded-xl bg-gray-50 hover:bg-indigo-50/50 transition-colors"
+                          className="block px-3 py-3 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
-                            <p className="text-sm font-semibold text-gray-900 flex-1 min-w-0 truncate">{project.name}</p>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white flex-1 min-w-0 truncate">{project.name}</p>
                             <span className="text-xs font-bold text-indigo-600 flex-shrink-0">{completion}%</span>
                           </div>
                           {/* Progress bar */}
-                          <div className="w-full bg-gray-200 rounded-full h-1.5 mb-2">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-2">
                             <div
                               className="h-1.5 rounded-full bg-indigo-500 transition-all"
                               style={{ width: `${completion}%` }}
@@ -566,16 +566,16 @@ export default function MarketingDashboard() {
               </div>
 
               {/* Tasks this month */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                   Задачи на месяц ({monthTasks.length + monthProjectTasks.length})
                 </p>
                 {monthTasks.length === 0 && monthProjectTasks.length === 0 ? (
-                  <p className="text-sm text-gray-400 py-4 text-center">Нет задач</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет задач</p>
                 ) : (
                   <div className="space-y-1 ">
                     {monthTasks.map((item) => (
-                      <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
+                      <div key={`dept-${item.task.id}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/50 ${item.task.status === "done" ? "opacity-60" : ""}`}>
                         <button
                           onClick={() => toggleDeptTask(item.deptId, item.task.id)}
                           className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
@@ -591,14 +591,14 @@ export default function MarketingDashboard() {
                             </svg>
                           )}
                         </button>
-                        <span className={`text-sm text-gray-800 flex-1 ${item.task.status === "done" ? "line-through text-gray-400" : ""}`}>{item.task.text}</span>
+                        <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${item.task.status === "done" ? "line-through text-gray-400" : ""}`}>{item.task.text}</span>
                         <span className="text-[10px] text-gray-400 flex-shrink-0">
                           {new Date(item.task.dueDate + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
                         </span>
                       </div>
                     ))}
                     {monthProjectTasks.map((item) => (
-                      <div key={`proj-${item.taskId}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50 ${item.status === "done" ? "opacity-60" : ""}`}>
+                      <div key={`proj-${item.taskId}`} className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/20 ${item.status === "done" ? "opacity-60" : ""}`}>
                         <button
                           onClick={() => toggleProjectTask(item.projectId, item.stageId, item.taskId)}
                           className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
@@ -614,7 +614,7 @@ export default function MarketingDashboard() {
                             </svg>
                           )}
                         </button>
-                        <span className={`text-sm text-gray-800 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
+                        <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
                         <span className="text-[10px] text-indigo-500 flex-shrink-0">{item.projectName}</span>
                       </div>
                     ))}
@@ -623,8 +623,8 @@ export default function MarketingDashboard() {
               </div>
 
               {/* Employees this month — off days summary */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
                   График сотрудников
                 </p>
                 <div className="space-y-2">
@@ -635,7 +635,7 @@ export default function MarketingDashboard() {
                     const workDays = daysInMonth - offDays - vacDays;
 
                     return (
-                      <div key={emp.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-50">
+                      <div key={emp.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-700/50">
                         <div
                           className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
                           style={{ backgroundColor: emp.color }}
@@ -643,7 +643,7 @@ export default function MarketingDashboard() {
                           {emp.name[0]}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{emp.name}</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">{emp.name}</p>
                           <div className="flex items-center gap-3 mt-0.5">
                             <span className="text-[10px] text-green-600 font-medium">{workDays} раб.</span>
                             {offDays > 0 && <span className="text-[10px] text-orange-600 font-medium">{offDays} вых.</span>}
@@ -651,7 +651,7 @@ export default function MarketingDashboard() {
                           </div>
                         </div>
                         {/* Mini bar showing ratio */}
-                        <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden flex-shrink-0">
+                        <div className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden flex-shrink-0">
                           <div
                             className="h-full bg-green-400 rounded-full"
                             style={{ width: `${(workDays / daysInMonth) * 100}%` }}
@@ -666,7 +666,7 @@ export default function MarketingDashboard() {
           </div>
         )}
 
-        <div className="text-center py-6 text-xs text-gray-400">
+        <div className="text-center py-6 text-xs text-gray-400 dark:text-gray-500">
           Дашборд маркетингового отдела
         </div>
       </div>
@@ -694,12 +694,12 @@ function KpiCard({
   const offset = circumference * (1 - Math.min(pct, 100) / 100);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-      <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-2 font-semibold">{label}</p>
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+      <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">{label}</p>
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <p className="text-xl font-black text-gray-900">{value}</p>
-          <p className="text-[11px] text-gray-400">{sub}</p>
+          <p className="text-xl font-black text-gray-900 dark:text-white">{value}</p>
+          <p className="text-[11px] text-gray-400 dark:text-gray-500">{sub}</p>
         </div>
         <div className="relative w-12 h-12 flex-shrink-0">
           <svg className="w-12 h-12 -rotate-90" viewBox="0 0 56 56">
@@ -716,7 +716,7 @@ function KpiCard({
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[10px] font-black text-gray-900">{pct}%</span>
+            <span className="text-[10px] font-black text-gray-900 dark:text-white">{pct}%</span>
           </div>
         </div>
       </div>
