@@ -360,6 +360,11 @@ export async function runAutoMigrate() {
       await conn.query("ALTER TABLE leads DROP COLUMN product_type_id");
     }
 
+    // Ensure ENUM definitions are up-to-date (fixes servers where the table was created with different values)
+    console.log("  [migrate] Ensuring leads ENUM columns are correct");
+    await conn.query(`ALTER TABLE leads MODIFY COLUMN contact_method ENUM('salon','phone','social','old_request') NOT NULL`);
+    await conn.query(`ALTER TABLE leads MODIFY COLUMN result ENUM('measurement','sale','deferred') NOT NULL`);
+
     // ───────────────────────────────────────────────────────────
     //  LEAD_PRODUCT_TYPES (many-to-many)
     // ───────────────────────────────────────────────────────────
