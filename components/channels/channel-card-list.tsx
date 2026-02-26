@@ -57,12 +57,6 @@ export default function ChannelCardList({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
 
-  // Current month prefix
-  const monthPrefix = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  }, []);
-
   return (
     <div className="space-y-8">
       {groups.map((group) => {
@@ -101,9 +95,8 @@ export default function ChannelCardList({
                 const doneTasks = chTasks.filter((t) => t.status === "done").length;
                 const profit = revenue - chExpenses;
 
-                // Leads today and this month for this channel
+                // Leads today for this channel
                 const chLeadsToday = chLeads.filter((l) => l.date === todayKey).length;
-                const chLeadsMonth = chLeads.filter((l) => l.date.startsWith(monthPrefix)).length;
 
                 const isExpanded = expandedIds.has(channel.id);
 
@@ -154,28 +147,22 @@ export default function ChannelCardList({
                         </div>
                       </div>
 
-                      {/* Main stat — total leads */}
+                      {/* Main stat — monthly leads */}
                       <div className="flex items-end gap-2 mb-3">
                         <span className="text-3xl font-black text-gray-900">
                           {chLeads.length}
                         </span>
                         <span className="text-sm text-gray-400 mb-1">
-                          лид{chLeads.length === 1 ? "" : chLeads.length < 5 ? "а" : "ов"} всего
+                          лид{chLeads.length === 1 ? "" : chLeads.length < 5 ? "а" : "ов"} за месяц
                         </span>
                       </div>
 
-                      {/* Lead counts: today / month */}
+                      {/* Lead count: today */}
                       <div className="flex items-center gap-4 mb-4">
                         <div className="flex items-center gap-1.5">
                           <div className="w-2 h-2 rounded-full bg-blue-500" />
                           <span className="text-xs text-gray-500">
                             Сегодня: <span className="font-bold text-gray-800">{chLeadsToday}</span>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <div className="w-2 h-2 rounded-full bg-indigo-500" />
-                          <span className="text-xs text-gray-500">
-                            Месяц: <span className="font-bold text-gray-800">{chLeadsMonth}</span>
                           </span>
                         </div>
                       </div>
