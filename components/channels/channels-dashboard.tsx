@@ -43,19 +43,35 @@ export default function ChannelsDashboard() {
   const [editingMonthly, setEditingMonthly] = useState(false);
   const [monthlyInput, setMonthlyInput] = useState(String(monthlyLeadPlan));
 
-  // ─── Financials ───
-  const channelIds = useMemo(() => channels.map((c) => c.id), [channels]);
-  const totalRev = useMemo(() => totalRevenue(filteredLeads, channelIds, averageCheck, productTypes), [filteredLeads, channelIds, averageCheck, productTypes]);
-  const channelExpensesTotal = useMemo(() => {
-    return channels.reduce((sum, c) => sum + totalExpensesForChannel(filteredExpenses, c.id), 0);
-  }, [channels, filteredExpenses]);
-  const overallRomi = useMemo(() => channelRomi(totalRev, channelExpensesTotal), [totalRev, channelExpensesTotal]);
-
-  // ─── Daily/monthly leads ───
+  // ─── Date keys ───
   const todayKey = useMemo(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
+  const monthPrefix = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  // ─── Month-filtered data (all financial metrics use current month only) ───
+  const monthFilteredLeads = useMemo(
+    () => filteredLeads.filter((l) => l.date.startsWith(monthPrefix)),
+    [filteredLeads, monthPrefix]
+  );
+  const monthFilteredExpenses = useMemo(
+    () => filteredExpenses.filter((e) => e.date.startsWith(monthPrefix)),
+    [filteredExpenses, monthPrefix]
+  );
+
+  // ─── Financials (current month) ───
+  const channelIds = useMemo(() => channels.map((c) => c.id), [channels]);
+  const totalRev = useMemo(() => totalRevenue(monthFilteredLeads, channelIds, averageCheck, productTypes), [monthFilteredLeads, channelIds, averageCheck, productTypes]);
+  const channelExpensesTotal = useMemo(() => {
+    return channels.reduce((sum, c) => sum + totalExpensesForChannel(monthFilteredExpenses, c.id), 0);
+  }, [channels, monthFilteredExpenses]);
+  const overallRomi = useMemo(() => channelRomi(totalRev, channelExpensesTotal), [totalRev, channelExpensesTotal]);
+
+  // ─── Daily/monthly leads (for plan blocks) ───
   const todayLeads = useMemo(() => leadsByDate(filteredLeads, todayKey), [filteredLeads, todayKey]);
   const now = new Date();
   const monthLeads = useMemo(() => leadsForMonth(filteredLeads, now.getFullYear(), now.getMonth()), [filteredLeads]);
@@ -140,13 +156,13 @@ export default function ChannelsDashboard() {
     return groups.map((g) => {
       const groupChannels = channels.filter((c) => c.group === g.id);
       const groupChannelIds = groupChannels.map((c) => c.id);
-      const income = totalRevenue(filteredLeads, groupChannelIds, averageCheck, productTypes);
+      const income = totalRevenue(monthFilteredLeads, groupChannelIds, averageCheck, productTypes);
       const groupExpenses = groupChannels.reduce(
-        (sum, c) => sum + totalExpensesForChannel(filteredExpenses, c.id),
+        (sum, c) => sum + totalExpensesForChannel(monthFilteredExpenses, c.id),
         0
       );
       const romi = channelRomi(income, groupExpenses);
-      const leadCount = filteredLeads.filter((l) => groupChannelIds.includes(l.channelId)).length;
+      const leadCount = monthFilteredLeads.filter((l) => groupChannelIds.includes(l.channelId)).length;
       return {
         id: g.id,
         label: g.label,
@@ -157,7 +173,7 @@ export default function ChannelsDashboard() {
         romi,
       };
     });
-  }, [channels, filteredLeads, filteredExpenses, averageCheck, productTypes]);
+  }, [channels, monthFilteredLeads, monthFilteredExpenses, averageCheck, productTypes]);
 
   const profit = totalRev - channelExpensesTotal;
   const dailyPct = dailyLeadPlan > 0 ? Math.min(100, Math.round((todayLeads.length / dailyLeadPlan) * 100)) : 0;
@@ -194,7 +210,7 @@ export default function ChannelsDashboard() {
           <div>
             <h1 className="text-2xl font-black text-gray-900 dark:text-white">Рекламные каналы</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {channels.length} канал{channels.length === 1 ? "" : channels.length < 5 ? "а" : "ов"} · {filteredLeads.length} лид{filteredLeads.length === 1 ? "" : filteredLeads.length < 5 ? "а" : "ов"}
+              {channels.length} канал{channels.length === 1 ? "" : channels.length < 5 ? "а" : "ов"} · {monthFilteredLeads.length} лид{monthFilteredLeads.length === 1 ? "" : monthFilteredLeads.length < 5 ? "а" : "ов"} за месяц
             </p>
           </div>
           <button
@@ -445,8 +461,8 @@ export default function ChannelsDashboard() {
         {/* Channel cards */}
         <ChannelCardList
           channels={channels}
-          leads={filteredLeads}
-          expenses={filteredExpenses}
+          leads={monthFilteredLeads}
+          expenses={monthFilteredExpenses}
           averageCheck={averageCheck}
           standaloneTasks={standaloneTasks}
           filterGroup={filterGroup}
