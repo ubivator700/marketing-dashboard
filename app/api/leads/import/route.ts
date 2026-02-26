@@ -9,8 +9,52 @@ interface NameIdRow extends RowDataPacket {
   name: string;
 }
 
-const VALID_CONTACT_METHODS = ["salon", "phone", "social", "old_request"];
-const VALID_RESULTS = ["measurement", "sale", "deferred"];
+// ─── Mapping: Russian labels & aliases → DB enum values ─────────
+const CONTACT_METHOD_MAP: Record<string, string> = {
+  // Enum values (pass-through)
+  salon: "salon",
+  phone: "phone",
+  social: "social",
+  old_request: "old_request",
+  // Russian labels
+  "в салоне": "salon",
+  "салон": "salon",
+  "по телефону": "phone",
+  "телефон": "phone",
+  "звонок": "phone",
+  "соц. сети": "social",
+  "соц сети": "social",
+  "соцсети": "social",
+  "социальные сети": "social",
+  "старая заявка": "old_request",
+  "повторное обращение": "old_request",
+  "повторный": "old_request",
+  "старый": "old_request",
+};
+
+const RESULT_MAP: Record<string, string> = {
+  // Enum values (pass-through)
+  measurement: "measurement",
+  sale: "sale",
+  deferred: "deferred",
+  // Russian labels
+  "замер": "measurement",
+  "замеры": "measurement",
+  "продажа": "sale",
+  "продано": "sale",
+  "отложенный": "deferred",
+  "отложен": "deferred",
+  "отложено": "deferred",
+  "думает": "deferred",
+};
+
+function resolveContactMethod(raw: string): string | null {
+  return CONTACT_METHOD_MAP[raw.toLowerCase().trim()] ?? null;
+}
+
+function resolveResult(raw: string): string | null {
+  return RESULT_MAP[raw.toLowerCase().trim()] ?? null;
+}
 
 export async function POST(request: NextRequest) {
   const { session, error } = await requireAuth();
@@ -27,7 +71,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Файл не загружен" }, { status: 400 });
     }
 
-    // Read the file into a buffer (use Uint8Array for Node 22 compat with exceljs)
+    // Read the file (use ArrayBuffer directly for Node 22 compat with exceljs)
     const arrayBuffer = await file.arrayBuffer();
 
     // Parse Excel
@@ -80,25 +124,28 @@ export async function POST(request: NextRequest) {
 
       const name = String(row.getCell(1).value ?? "").trim();
       const channelName = String(row.getCell(2).value ?? "").trim();
-      const contactMethod = String(row.getCell(3).value ?? "").trim().toLowerCase();
-      const result = String(row.getCell(4).value ?? "").trim().toLowerCase();
+      const contactMethodRaw = String(row.getCell(3).value ?? "").trim();
+      const resultRaw = String(row.getCell(4).value ?? "").trim();
       const dateRaw = row.getCell(5).value;
       const note = String(row.getCell(6).value ?? "").trim() || null;
       const storeName = String(row.getCell(7).value ?? "").trim();
       const productTypeRaw = String(row.getCell(8).value ?? "").trim();
 
-      // Skip empty rows
+      // Skip empty rows and instruction rows
       if (!name) return;
+      if (name.startsWith("↑") || name.includes("Удалите примеры")) return;
 
-      // Validate contact method
-      if (!VALID_CONTACT_METHODS.includes(contactMethod)) {
-        errors.push(`Строка ${rowNumber}: неверный способ контакта "${contactMethod}". Допустимо: ${VALID_CONTACT_METHODS.join(", ")}`);
+      // Resolve contact method (supports both enum values and Russian labels)
+      const contactMethod = resolveContactMethod(contactMethodRaw);
+      if (!contactMethod) {
+        errors.push(`Строка ${rowNumber}: неверный способ контакта "${contactMethodRaw}". Допустимо: В салоне, По телефону, Соц. сети, Старая заявка (или salon, phone, social, old_request)`);
         return;
       }
 
-      // Validate result
-      if (!VALID_RESULTS.includes(result)) {
-        errors.push(`Строка ${rowNumber}: неверный результат "${result}". Допустимо: ${VALID_RESULTS.join(", ")}`);
+      // Resolve result (supports both enum values and Russian labels)
+      const result = resolveResult(resultRaw);
+      if (!result) {
+        errors.push(`Строка ${rowNumber}: неверный результат "${resultRaw}". Допустимо: Замер, Продажа, Отложенный (или measurement, sale, deferred)`);
         return;
       }
 
