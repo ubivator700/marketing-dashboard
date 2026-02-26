@@ -9,8 +9,78 @@ interface NameIdRow extends RowDataPacket {
   name: string;
 }
 
-const VALID_CONTACT_METHODS = ["salon", "phone", "social", "old_request"];
-const VALID_RESULTS = ["measurement", "sale", "deferred"];
+// ─── Mapping: Russian labels & aliases → DB enum values ─────────
+const CONTACT_METHOD_MAP: Record<string, string> = {
+  // Enum values (pass-through)
+  salon: "salon",
+  phone: "phone",
+  social: "social",
+  old_request: "old_request",
+  // Russian labels
+  "в салоне": "salon",
+  "салон": "salon",
+  "по телефону": "phone",
+  "телефон": "phone",
+  "звонок": "phone",
+  "соц. сети": "social",
+  "соц сети": "social",
+  "соцсети": "social",
+  "социальные сети": "social",
+  "старая заявка": "old_request",
+  "повторное обращение": "old_request",
+  "повторный": "old_request",
+  "старый": "old_request",
+};
+
+const RESULT_MAP: Record<string, string> = {
+  // Enum values (pass-through)
+  measurement: "measurement",
+  sale: "sale",
+  deferred: "deferred",
+  // Russian labels
+  "замер": "measurement",
+  "замеры": "measurement",
+  "продажа": "sale",
+  "продано": "sale",
+  "отложенный": "deferred",
+  "отложен": "deferred",
+  "отложено": "deferred",
+  "думает": "deferred",
+};
+
+function resolveContactMethod(raw: string): string | null {
+  return CONTACT_METHOD_MAP[raw.toLowerCase().trim()] ?? null;
+}
+
+function resolveResult(raw: string): string | null {
+  return RESULT_MAP[raw.toLowerCase().trim()] ?? null;
+}
+
+/** Safely extract a plain string from any ExcelJS cell value (handles richText, formula, hyperlink, etc.) */
+function getCellString(cell: ExcelJS.Cell): string {
+  const v = cell.value;
+  if (v == null) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  // Rich text: { richText: [{ text: '...' }, ...] }
+  if (typeof v === "object" && "richText" in v && Array.isArray((v as { richText: { text: string }[] }).richText)) {
+    return (v as { richText: { text: string }[] }).richText.map((r) => r.text).join("");
+  }
+  // Hyperlink: { text: '...', hyperlink: '...' }
+  if (typeof v === "object" && "text" in v) {
+    return String((v as { text: string }).text);
+  }
+  // Formula result: { result: ..., formula: '...' }
+  if (typeof v === "object" && "result" in v) {
+    const res = (v as { result: unknown }).result;
+    if (res == null) return "";
+    if (res instanceof Date) return res.toISOString().slice(0, 10);
+    return String(res);
+  }
+  // Fallback
+  return String(v);
+}
 
 export async function POST(request: NextRequest) {
   const { session, error } = await requireAuth();
@@ -27,7 +97,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Файл не загружен" }, { status: 400 });
     }
 
-    // Read the file into a buffer (use Uint8Array for Node 22 compat with exceljs)
+    // Read the file (use ArrayBuffer directly for Node 22 compat with exceljs)
     const arrayBuffer = await file.arrayBuffer();
 
     // Parse Excel
@@ -78,27 +148,34 @@ export async function POST(request: NextRequest) {
     ws.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return; // skip header
 
-      const name = String(row.getCell(1).value ?? "").trim();
-      const channelName = String(row.getCell(2).value ?? "").trim();
-      const contactMethod = String(row.getCell(3).value ?? "").trim().toLowerCase();
-      const result = String(row.getCell(4).value ?? "").trim().toLowerCase();
+      const name = getCellString(row.getCell(1)).trim();
+      const channelName = getCellString(row.getCell(2)).trim();
+      const contactMethodRaw = getCellString(row.getCell(3)).trim();
+      const resultRaw = getCellString(row.getCell(4)).trim();
+      const note = getCellString(row.getCell(6)).trim() || null;
+      const storeName = getCellString(row.getCell(7)).trim();
+      const productTypeRaw = getCellString(row.getCell(8)).trim();
+
+      // Date needs special handling (ExcelJS often returns Date objects)
       const dateRaw = row.getCell(5).value;
-      const note = String(row.getCell(6).value ?? "").trim() || null;
-      const storeName = String(row.getCell(7).value ?? "").trim();
-      const productTypeRaw = String(row.getCell(8).value ?? "").trim();
 
-      // Skip empty rows
+      // Skip empty rows and instruction rows
       if (!name) return;
+      if (name.startsWith("↑") || name.includes("Удалите примеры")) return;
 
-      // Validate contact method
-      if (!VALID_CONTACT_METHODS.includes(contactMethod)) {
-        errors.push(`Строка ${rowNumber}: неверный способ контакта "${contactMethod}". Допустимо: ${VALID_CONTACT_METHODS.join(", ")}`);
+      console.log(`[leads/import] parsing row ${rowNumber}: name="${name}" contactMethodRaw="${contactMethodRaw}" (type=${typeof row.getCell(3).value}, raw=${JSON.stringify(row.getCell(3).value)}) resultRaw="${resultRaw}" (type=${typeof row.getCell(4).value}, raw=${JSON.stringify(row.getCell(4).value)})`);
+
+      // Resolve contact method (supports both enum values and Russian labels)
+      const contactMethod = resolveContactMethod(contactMethodRaw);
+      if (!contactMethod) {
+        errors.push(`Строка ${rowNumber}: неверный способ контакта "${contactMethodRaw}". Допустимо: В салоне, По телефону, Соц. сети, Старая заявка (или salon, phone, social, old_request)`);
         return;
       }
 
-      // Validate result
-      if (!VALID_RESULTS.includes(result)) {
-        errors.push(`Строка ${rowNumber}: неверный результат "${result}". Допустимо: ${VALID_RESULTS.join(", ")}`);
+      // Resolve result (supports both enum values and Russian labels)
+      const result = resolveResult(resultRaw);
+      if (!result) {
+        errors.push(`Строка ${rowNumber}: неверный результат "${resultRaw}". Допустимо: Замер, Продажа, Отложенный (или measurement, sale, deferred)`);
         return;
       }
 
@@ -171,7 +248,8 @@ export async function POST(request: NextRequest) {
       productTypeIds: number[];
     }[] = [];
 
-    for (const { data } of validRows) {
+    for (const { rowNumber, data } of validRows) {
+      console.log(`[leads/import] row ${rowNumber}: contactMethod="${data.contactMethod}" result="${data.result}"`);
       const [queryResult] = await pool.query(
         "INSERT INTO leads (name, channel_id, contact_method, result, date, note, store_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [data.name, data.channelId, data.contactMethod, data.result, data.date, data.note, data.storeId]

@@ -19,8 +19,8 @@ export async function GET() {
   const storeNames = storeRows.map((r) => r.name as string);
   const productTypeNames = productTypeRows.map((r) => r.name as string);
 
-  const CONTACT_METHODS = ["salon", "phone", "social", "old_request"];
-  const RESULTS = ["measurement", "sale", "deferred"];
+  const CONTACT_METHODS = ["В салоне", "По телефону", "Соц. сети", "Старая заявка"];
+  const RESULTS = ["Замер", "Продажа", "Отложенный"];
 
   const wb = new ExcelJS.Workbook();
 
@@ -125,7 +125,7 @@ export async function GET() {
       formulae: [cmRange],
       showErrorMessage: true,
       errorTitle: "Неверный способ",
-      error: "Допустимо: salon, phone, social, old_request",
+      error: "Допустимо: В салоне, По телефону, Соц. сети, Старая заявка",
     };
 
     // Result dropdown
@@ -134,7 +134,7 @@ export async function GET() {
       formulae: [resRange],
       showErrorMessage: true,
       errorTitle: "Неверный результат",
-      error: "Допустимо: measurement, sale, deferred",
+      error: "Допустимо: Замер, Продажа, Отложенный",
     };
 
     // Store dropdown
@@ -162,8 +162,8 @@ export async function GET() {
     {
       name: "Иван Иванов",
       channel: channelNames[0] ?? "Яндекс Директ",
-      contactMethod: "phone",
-      result: "measurement",
+      contactMethod: "По телефону",
+      result: "Замер",
       date: today,
       note: "Звонок по рекламе",
       store: storeNames[0] ?? "",
@@ -172,8 +172,8 @@ export async function GET() {
     {
       name: "Неизвестно",
       channel: channelNames[1] ?? channelNames[0] ?? "Google Ads",
-      contactMethod: "salon",
-      result: "sale",
+      contactMethod: "В салоне",
+      result: "Продажа",
       date: today,
       note: "Пришла в салон",
       store: storeNames[0] ?? "",
@@ -307,14 +307,14 @@ export async function GET() {
       formulae: [cmRange2],
       showErrorMessage: true,
       errorTitle: "Неверный способ",
-      error: "Допустимо: salon, phone, social, old_request",
+      error: "Допустимо: В салоне, По телефону, Соц. сети, Старая заявка",
     };
     ws2.getCell(`D${r}`).dataValidation = {
       type: "list",
       formulae: [resRange2],
       showErrorMessage: true,
       errorTitle: "Неверный результат",
-      error: "Допустимо: measurement, sale, deferred",
+      error: "Допустимо: Замер, Продажа, Отложенный",
     };
     if (stRange2) {
       ws2.getCell(`G${r}`).dataValidation = {
