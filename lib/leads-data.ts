@@ -1,4 +1,4 @@
-import type { Lead, ContactMethod, LeadResult } from "@/types/dashboard";
+import type { Lead, ContactMethod, LeadResult, ProductCategory } from "@/types/dashboard";
 
 export const DEFAULT_AVERAGE_CHECK = 8000;
 
@@ -6,6 +6,7 @@ export const contactMethodLabels: Record<ContactMethod, string> = {
   salon: "В салоне",
   phone: "По телефону",
   social: "Соц. сети",
+  old_request: "Старая заявка",
 };
 
 export const leadResultLabels: Record<LeadResult, string> = {
@@ -20,10 +21,17 @@ export const leadResultColors: Record<LeadResult, string> = {
   deferred: "bg-yellow-100 text-yellow-700",
 };
 
+export const productCategoryLabels: Record<ProductCategory, string> = {
+  doors: "Двери",
+  windows: "Окна",
+  floors: "Полы",
+  other: "Другое",
+};
+
 export const initialLeads: Lead[] = [
-  { id: 1, name: "Иванов Пётр", channelId: 3, contactMethod: "phone", result: "measurement", date: "2025-03-05", note: "Квартира 45 м2" },
-  { id: 2, name: "Смирнова Анна", channelId: 4, contactMethod: "social", result: "sale", date: "2025-03-07", note: "Кухня под ключ" },
-  { id: 3, name: "Козлов Дмитрий", channelId: 7, contactMethod: "salon", result: "measurement", date: "2025-03-10" },
-  { id: 4, name: "Фёдорова Елена", channelId: 1, contactMethod: "salon", result: "deferred", date: "2025-03-12", note: "Вернётся через месяц" },
-  { id: 5, name: "Николаев Артём", channelId: 9, contactMethod: "phone", result: "sale", date: "2025-03-15" },
+  { id: 1, name: "Иванов Пётр", channelId: 3, contactMethod: "phone", result: "measurement", date: "2025-03-05", note: "Квартира 45 м2", storeId: null, productTypeIds: [] },
+  { id: 2, name: "Смирнова Анна", channelId: 4, contactMethod: "social", result: "sale", date: "2025-03-07", note: "Кухня под ключ", storeId: null, productTypeIds: [] },
+  { id: 3, name: "Козлов Дмитрий", channelId: 7, contactMethod: "salon", result: "measurement", date: "2025-03-10", storeId: null, productTypeIds: [] },
+  { id: 4, name: "Фёдорова Елена", channelId: 1, contactMethod: "salon", result: "deferred", date: "2025-03-12", note: "Вернётся через месяц", storeId: null, productTypeIds: [] },
+  { id: 5, name: "Николаев Артём", channelId: 9, contactMethod: "phone", result: "sale", date: "2025-03-15", storeId: null, productTypeIds: [] },
 ];

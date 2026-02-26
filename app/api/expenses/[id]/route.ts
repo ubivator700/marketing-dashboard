@@ -15,11 +15,11 @@ export async function PUT(
 
   const { id } = await params;
   const body = await request.json();
-  const { name, amount, responsible, date, projectId, channelId } = body;
+  const { name, amount, responsible, date, projectId, channelId, storeId } = body;
 
   await pool.query(
-    "UPDATE expenses SET name=?, amount=?, responsible=?, date=?, project_id=?, channel_id=? WHERE id=?",
-    [name, amount, responsible, date, projectId ?? null, channelId ?? null, id]
+    "UPDATE expenses SET name=?, amount=?, responsible=?, date=?, project_id=?, channel_id=?, store_id=? WHERE id=?",
+    [name, amount, responsible, date, projectId ?? null, channelId ?? null, storeId ?? null, id]
   );
 
   return NextResponse.json({
@@ -30,6 +30,7 @@ export async function PUT(
     date,
     projectId: projectId ?? null,
     channelId: channelId ?? null,
+    storeId: storeId ?? null,
   });
 }
 

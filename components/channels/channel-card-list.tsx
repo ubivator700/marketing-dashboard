@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Channel, ChannelGroup, Lead, Expense } from "@/types/dashboard";
+import type { Channel, ChannelGroup, Lead, Expense, StandaloneTask, ProductType } from "@/types/dashboard";
 import {
   channelGroupLabels,
   channelGroupColors,
@@ -15,7 +15,9 @@ interface ChannelCardListProps {
   leads: Lead[];
   expenses: Expense[];
   averageCheck: number;
+  standaloneTasks: StandaloneTask[];
   filterGroup: ChannelGroup | null;
+  productTypes?: ProductType[];
   onSelectChannel: (channel: Channel) => void;
   onEditChannel: (channel: Channel) => void;
   onDeleteChannel: (channelId: number) => void;
@@ -26,7 +28,9 @@ export default function ChannelCardList({
   leads,
   expenses,
   averageCheck,
+  standaloneTasks,
   filterGroup,
+  productTypes,
   onSelectChannel,
   onEditChannel,
   onDeleteChannel,
@@ -90,10 +94,11 @@ export default function ChannelCardList({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {groupChannels.map((channel) => {
                 const chLeads = leadsByChannel(leads, channel.id);
-                const revenue = channelRevenue(leads, channel.id, averageCheck);
+                const revenue = channelRevenue(leads, channel.id, averageCheck, productTypes);
                 const chExpenses = totalExpensesForChannel(expenses, channel.id);
                 const romi = channelRomi(revenue, chExpenses);
-                const doneTasks = channel.tasks.filter((t) => t.done).length;
+                const chTasks = standaloneTasks.filter((t) => t.channelId === channel.id);
+                const doneTasks = chTasks.filter((t) => t.status === "done").length;
                 const profit = revenue - chExpenses;
 
                 // Leads today and this month for this channel
@@ -218,7 +223,7 @@ export default function ChannelCardList({
                       </div>
 
                       {/* Tasks */}
-                      {channel.tasks.length > 0 && (
+                      {chTasks.length > 0 && (
                         <div className="mt-3 pt-3 border-t border-gray-50">
                           {/* Clickable task summary bar */}
                           <button
@@ -232,13 +237,13 @@ export default function ChannelCardList({
                             <div className="flex items-center gap-1.5">
                               <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
                               <span className="text-xs text-gray-500">
-                                {doneTasks}/{channel.tasks.length}
+                                {doneTasks}/{chTasks.length}
                               </span>
                             </div>
                             <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
                               <div
                                 className="h-full bg-indigo-500 rounded-full transition-all"
-                                style={{ width: `${(doneTasks / channel.tasks.length) * 100}%` }}
+                                style={{ width: `${(doneTasks / chTasks.length) * 100}%` }}
                               />
                             </div>
                             <span className="text-xs text-gray-400 flex items-center gap-1">
@@ -261,13 +266,13 @@ export default function ChannelCardList({
                               className="mt-2 space-y-1.5"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              {channel.tasks.map((task) => (
+                              {chTasks.map((task) => (
                                 <div
                                   key={task.id}
                                   className="flex items-start gap-2 py-1 px-1 rounded-md"
                                 >
                                   {/* Done/not-done indicator */}
-                                  {task.done ? (
+                                  {task.status === "done" ? (
                                     <svg
                                       className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0"
                                       fill="currentColor"
@@ -287,22 +292,29 @@ export default function ChannelCardList({
                                     </svg>
                                   )}
 
-                                  {/* Task text and deadline */}
+                                  {/* Task name, assignee and deadline */}
                                   <div className="flex-1 min-w-0">
                                     <p
                                       className={`text-xs leading-relaxed ${
-                                        task.done
+                                        task.status === "done"
                                           ? "line-through text-gray-400"
                                           : "text-gray-700"
                                       }`}
                                     >
-                                      {task.text}
+                                      {task.name}
                                     </p>
-                                    {task.deadline && (
-                                      <p className="text-[10px] text-gray-400 mt-0.5">
-                                        до {task.deadline}
-                                      </p>
-                                    )}
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {task.assignee && (
+                                        <span className="text-[10px] text-gray-400">
+                                          {task.assignee}
+                                        </span>
+                                      )}
+                                      {task.deadline && (
+                                        <span className="text-[10px] text-gray-400">
+                                          до {new Date(task.deadline + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               ))}

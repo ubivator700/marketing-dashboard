@@ -11,6 +11,7 @@ import {
 } from "@/lib/data";
 import DepartmentFilter from "./department-filter";
 import TaskEditModal from "./task-edit-modal";
+import { layoutOverlappingItems, type LayoutItem } from "@/lib/calendar-layout";
 
 // ─── Types ───────────────────────────────────────────────────────────
 type CalendarView = "month" | "week";
@@ -533,14 +534,24 @@ export default function CalendarTab({
                 );
               })()}
 
-              {/* Task blocks */}
+              {/* Task blocks (with overlap layout) */}
               {weekDays.map((date, colIdx) => {
                 const key = formatDateKey(date.getFullYear(), date.getMonth(), date.getDate());
                 const tasks = tasksByDate.get(key) || [];
+                const timedTasks = tasks.filter((t) => t.dueTime);
 
-                return tasks
-                  .filter((t) => t.dueTime)
-                  .map((task) => {
+                // Build layout for overlap detection
+                const layoutItems: LayoutItem[] = [];
+                for (const task of timedTasks) {
+                  const [h, m] = task.dueTime!.split(":").map(Number);
+                  const startMin = h * 60 + m;
+                  const dur = task.duration || 60;
+                  if (startMin + dur < START_HOUR * 60 || startMin >= END_HOUR * 60) continue;
+                  layoutItems.push({ id: `${task.dept.id}-${task.id}`, startMin, endMin: startMin + dur });
+                }
+                const layoutMap = layoutOverlappingItems(layoutItems);
+
+                return timedTasks.map((task) => {
                     const [h, m] = task.dueTime!.split(":").map(Number);
                     const taskStartMin = h * 60 + m;
                     const duration = task.duration || 60;
@@ -553,18 +564,25 @@ export default function CalendarTab({
                     if (taskStartMin + duration < startMinutes || taskStartMin >= END_HOUR * 60)
                       return null;
 
+                    const taskKey = `${task.dept.id}-${task.id}`;
+                    const layout = layoutMap.get(taskKey);
+                    const colCount = layout?.totalColumns ?? 1;
+                    const colIndex = layout?.column ?? 0;
+                    const widthPct = `${(1 / colCount) * 100}%`;
+                    const leftPct = `${(colIndex / colCount) * 100}%`;
+
                     return (
                       <button
-                        key={`${task.dept.id}-${task.id}`}
+                        key={taskKey}
                         onClick={() => setSelectedTask(task)}
-                        className="absolute mx-0.5 rounded-lg px-2 py-1 text-left overflow-hidden hover:brightness-95 transition-all cursor-pointer border border-white/50"
+                        className="absolute rounded-lg px-2 py-1 text-left overflow-hidden hover:brightness-95 transition-all cursor-pointer border border-white/50"
                         style={{
                           gridColumn: colIdx + 2,
                           gridRow: "1 / -1",
                           top: Math.max(topPx, 0),
                           height: Math.min(heightPx, (END_HOUR * 60 - taskStartMin) / 60 * HOUR_HEIGHT),
-                          left: 2,
-                          right: 2,
+                          left: leftPct,
+                          width: widthPct,
                           backgroundColor: task.dept.color + "20",
                           borderLeft: `3px solid ${task.dept.color}`,
                         }}

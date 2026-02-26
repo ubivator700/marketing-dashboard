@@ -10,7 +10,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import type { Project, Expense, Channel, Lead, Department, Employee, StandaloneTask } from "@/types/dashboard";
+import type { Project, Expense, Channel, Lead, Department, Employee, StandaloneTask, RecurringTask, Store, ProductType } from "@/types/dashboard";
 import { useAuth } from "@/lib/auth-context";
 
 // ─── Context interface (unchanged — all components stay compatible) ──
@@ -37,6 +37,20 @@ interface AppContextValue {
   setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
   standaloneTasks: StandaloneTask[];
   setStandaloneTasks: React.Dispatch<React.SetStateAction<StandaloneTask[]>>;
+  recurringTasks: RecurringTask[];
+  setRecurringTasks: React.Dispatch<React.SetStateAction<RecurringTask[]>>;
+  stores: Store[];
+  setStores: React.Dispatch<React.SetStateAction<Store[]>>;
+  selectedStoreId: number | null;
+  setSelectedStoreId: React.Dispatch<React.SetStateAction<number | null>>;
+  productTypes: ProductType[];
+  setProductTypes: React.Dispatch<React.SetStateAction<ProductType[]>>;
+  selectedProductTypeId: number | null;
+  setSelectedProductTypeId: React.Dispatch<React.SetStateAction<number | null>>;
+  taxCoefficient: number;
+  setTaxCoefficient: React.Dispatch<React.SetStateAction<number>>;
+  filteredLeads: Lead[];
+  filteredExpenses: Expense[];
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -222,9 +236,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [averageCheck, setAverageCheck] = useState<number>(0);
   const [monthlyLeadPlan, setMonthlyLeadPlan] = useState<number>(0);
   const [monthlyBudget, setMonthlyBudget] = useState<number>(0);
+  const [taxCoefficient, setTaxCoefficient] = useState<number>(0.07);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [standaloneTasks, setStandaloneTasks] = useState<StandaloneTask[]>([]);
+  const [recurringTasks, setRecurringTasks] = useState<RecurringTask[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
+  const [productTypes, setProductTypes] = useState<ProductType[]>([]);
+  const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Refs for previous values (used to compute diffs in sync effects)
@@ -235,9 +255,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const prevAvgCheck = useRef<number>(0);
   const prevMonthlyPlan = useRef<number>(0);
   const prevMonthlyBudget = useRef<number>(0);
+  const prevTaxCoefficient = useRef<number>(0.07);
   const prevDepartments = useRef<Department[]>([]);
   const prevEmployees = useRef<Employee[]>([]);
   const prevStandaloneTasks = useRef<StandaloneTask[]>([]);
+  const prevRecurringTasks = useRef<RecurringTask[]>([]);
+  const prevStores = useRef<Store[]>([]);
+  const prevProductTypes = useRef<ProductType[]>([]);
 
   // ─── Load from API on mount (after auth resolves) ─────────────
   useEffect(() => {
@@ -249,11 +273,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       fetch("/api/expenses").then((r) => r.ok ? r.json() : []),
       fetch("/api/channels").then((r) => r.ok ? r.json() : []),
       fetch("/api/leads").then((r) => r.ok ? r.json() : []),
-      fetch("/api/settings").then((r) => r.ok ? r.json() : {}) as Promise<{ averageCheck?: number; monthlyLeadPlan?: number; monthlyBudget?: number }>,
+      fetch("/api/settings").then((r) => r.ok ? r.json() : {}) as Promise<{ averageCheck?: number; monthlyLeadPlan?: number; monthlyBudget?: number; taxCoefficient?: number }>,
       fetch("/api/departments").then((r) => r.ok ? r.json() : []),
       fetch("/api/employees").then((r) => r.ok ? r.json() : []),
       fetch("/api/standalone-tasks").then((r) => r.ok ? r.json() : []),
-    ]).then(([proj, exp, ch, ld, settings, deps, emps, stasks]) => {
+      fetch("/api/recurring-tasks").then((r) => r.ok ? r.json() : []),
+      fetch("/api/stores").then((r) => r.ok ? r.json() : []),
+      fetch("/api/product-types").then((r) => r.ok ? r.json() : []),
+    ]).then(([proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes]) => {
       if (cancelled) return;
 
       setProjects(proj);
@@ -263,9 +290,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAverageCheck(settings.averageCheck ?? 0);
       setMonthlyLeadPlan(settings.monthlyLeadPlan ?? 0);
       setMonthlyBudget(settings.monthlyBudget ?? 0);
+      setTaxCoefficient(settings.taxCoefficient ?? 0.07);
       setDepartments(deps);
       setEmployees(emps);
       setStandaloneTasks(stasks);
+      setRecurringTasks(rtasks);
+      setStores(strs);
+      setProductTypes(ptypes);
 
       prevProjects.current = proj;
       prevExpenses.current = exp;
@@ -274,9 +305,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       prevAvgCheck.current = settings.averageCheck ?? 0;
       prevMonthlyPlan.current = settings.monthlyLeadPlan ?? 0;
       prevMonthlyBudget.current = settings.monthlyBudget ?? 0;
+      prevTaxCoefficient.current = settings.taxCoefficient ?? 0.07;
       prevDepartments.current = deps;
       prevEmployees.current = emps;
       prevStandaloneTasks.current = stasks;
+      prevRecurringTasks.current = rtasks;
+      prevStores.current = strs;
+      prevProductTypes.current = ptypes;
 
       setDataLoaded(true);
     });
@@ -339,6 +374,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!dataLoaded) return;
+    const prev = prevTaxCoefficient.current;
+    prevTaxCoefficient.current = taxCoefficient;
+    if (prev !== taxCoefficient) syncSettings("taxCoefficient", prev, taxCoefficient);
+  }, [taxCoefficient, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
     const prev = prevDepartments.current;
     prevDepartments.current = departments;
     if (prev !== departments) syncDepartments(prev, departments);
@@ -357,6 +399,40 @@ export function AppProvider({ children }: { children: ReactNode }) {
     prevStandaloneTasks.current = standaloneTasks;
     if (prev !== standaloneTasks) syncArray("/api/standalone-tasks", prev, standaloneTasks);
   }, [standaloneTasks, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const prev = prevRecurringTasks.current;
+    prevRecurringTasks.current = recurringTasks;
+    if (prev !== recurringTasks) syncArray("/api/recurring-tasks", prev, recurringTasks);
+  }, [recurringTasks, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const prev = prevStores.current;
+    prevStores.current = stores;
+    if (prev !== stores) syncArray("/api/stores", prev, stores);
+  }, [stores, dataLoaded]);
+
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const prev = prevProductTypes.current;
+    prevProductTypes.current = productTypes;
+    if (prev !== productTypes) syncArray("/api/product-types", prev, productTypes);
+  }, [productTypes, dataLoaded]);
+
+  // ─── Filtered leads/expenses by selectedStoreId + selectedProductTypeId ──
+  const filteredLeads = useMemo(() => {
+    let result = leads;
+    if (selectedStoreId !== null) result = result.filter((l) => l.storeId === selectedStoreId);
+    if (selectedProductTypeId !== null) result = result.filter((l) => l.productTypeIds.includes(selectedProductTypeId));
+    return result;
+  }, [leads, selectedStoreId, selectedProductTypeId]);
+
+  const filteredExpenses = useMemo(() => {
+    if (selectedStoreId === null) return expenses;
+    return expenses.filter((e) => e.storeId === selectedStoreId);
+  }, [expenses, selectedStoreId]);
 
   // ─── Computed daily lead plan (derived from monthly plan) ─────────
   const dailyLeadPlan = useMemo(() => {
@@ -398,6 +474,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         departments, setDepartments,
         employees, setEmployees,
         standaloneTasks, setStandaloneTasks,
+        recurringTasks, setRecurringTasks,
+        stores, setStores,
+        selectedStoreId, setSelectedStoreId,
+        productTypes, setProductTypes,
+        selectedProductTypeId, setSelectedProductTypeId,
+        taxCoefficient, setTaxCoefficient,
+        filteredLeads,
+        filteredExpenses,
       }}
     >
       {children}

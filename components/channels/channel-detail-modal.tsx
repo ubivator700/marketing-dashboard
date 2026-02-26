@@ -1,6 +1,6 @@
 "use client";
 
-import type { Channel, Lead, Expense, ChannelTask } from "@/types/dashboard";
+import type { Channel, Lead, Expense, StandaloneTask, ProductType } from "@/types/dashboard";
 import { channelGroupLabels, channelGroupColors } from "@/lib/channels-data";
 import { leadsByChannel, channelRevenue, channelRomi } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
@@ -12,10 +12,13 @@ interface ChannelDetailModalProps {
   leads: Lead[];
   expenses: Expense[];
   averageCheck: number;
+  standaloneTasks: StandaloneTask[];
+  employees: string[];
+  productTypes?: ProductType[];
   onEdit: (channel: Channel) => void;
   onDelete: (channelId: number) => void;
   onToggleTask: (channelId: number, taskId: number) => void;
-  onAddTask: (channelId: number, task: ChannelTask) => void;
+  onAddTask: (channelId: number, task: StandaloneTask) => void;
   onDeleteTask: (channelId: number, taskId: number) => void;
   onClose: () => void;
 }
@@ -25,6 +28,9 @@ export default function ChannelDetailModal({
   leads,
   expenses,
   averageCheck,
+  standaloneTasks,
+  employees,
+  productTypes,
   onEdit,
   onDelete,
   onToggleTask,
@@ -33,7 +39,7 @@ export default function ChannelDetailModal({
   onClose,
 }: ChannelDetailModalProps) {
   const chLeads = leadsByChannel(leads, channel.id);
-  const revenue = channelRevenue(leads, channel.id, averageCheck);
+  const revenue = channelRevenue(leads, channel.id, averageCheck, productTypes);
   const chExpenses = totalExpensesForChannel(expenses, channel.id);
   const romi = channelRomi(revenue, chExpenses);
   const groupColor = channelGroupColors[channel.group];
@@ -72,10 +78,12 @@ export default function ChannelDetailModal({
         </div>
       </div>
 
-      {/* Tasks */}
+      {/* Tasks — now showing standalone tasks linked to this channel */}
       <div className="border-t border-gray-100 pt-4">
         <ChannelTaskList
-          tasks={channel.tasks}
+          channelId={channel.id}
+          tasks={standaloneTasks}
+          employees={employees}
           onToggle={(taskId) => onToggleTask(channel.id, taskId)}
           onAdd={(task) => onAddTask(channel.id, task)}
           onDelete={(taskId) => onDeleteTask(channel.id, taskId)}

@@ -1,21 +1,20 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
-import type { Channel, ChannelGroup, ChannelTask } from "@/types/dashboard";
+import type { Channel, ChannelGroup, StandaloneTask } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
 import {
   addChannel,
   updateChannel,
   deleteChannel as removeChannel,
-  addChannelTask,
-  toggleChannelTask,
-  deleteChannelTask,
 } from "@/lib/channel-utils";
 import { channelRomi, totalRevenue, leadsByDate, leadsForMonth } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
 import ChannelCardList from "./channel-card-list";
 import ChannelDetailModal from "./channel-detail-modal";
 import ChannelEditModal from "./channel-edit-modal";
+import StoreFilter from "@/components/ui/store-filter";
+import ProductTypeFilter from "@/components/ui/product-type-filter";
 
 export default function ChannelsDashboard() {
   const {
@@ -25,6 +24,11 @@ export default function ChannelsDashboard() {
     averageCheck, setAverageCheck,
     monthlyLeadPlan, setMonthlyLeadPlan,
     dailyLeadPlan,
+    standaloneTasks, setStandaloneTasks,
+    employees,
+    stores, selectedStoreId, setSelectedStoreId,
+    productTypes, selectedProductTypeId, setSelectedProductTypeId,
+    filteredLeads, filteredExpenses,
   } = useAppContext();
 
   const [filterGroup, setFilterGroup] = useState<ChannelGroup | null>(null);
@@ -41,10 +45,10 @@ export default function ChannelsDashboard() {
 
   // ─── Financials ───
   const channelIds = useMemo(() => channels.map((c) => c.id), [channels]);
-  const totalRev = useMemo(() => totalRevenue(leads, channelIds, averageCheck), [leads, channelIds, averageCheck]);
+  const totalRev = useMemo(() => totalRevenue(filteredLeads, channelIds, averageCheck, productTypes), [filteredLeads, channelIds, averageCheck, productTypes]);
   const channelExpensesTotal = useMemo(() => {
-    return channels.reduce((sum, c) => sum + totalExpensesForChannel(expenses, c.id), 0);
-  }, [channels, expenses]);
+    return channels.reduce((sum, c) => sum + totalExpensesForChannel(filteredExpenses, c.id), 0);
+  }, [channels, filteredExpenses]);
   const overallRomi = useMemo(() => channelRomi(totalRev, channelExpensesTotal), [totalRev, channelExpensesTotal]);
 
   // ─── Daily/monthly leads ───
@@ -52,9 +56,9 @@ export default function ChannelsDashboard() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }, []);
-  const todayLeads = useMemo(() => leadsByDate(leads, todayKey), [leads, todayKey]);
+  const todayLeads = useMemo(() => leadsByDate(filteredLeads, todayKey), [filteredLeads, todayKey]);
   const now = new Date();
-  const monthLeads = useMemo(() => leadsForMonth(leads, now.getFullYear(), now.getMonth()), [leads]);
+  const monthLeads = useMemo(() => leadsForMonth(filteredLeads, now.getFullYear(), now.getMonth()), [filteredLeads]);
 
   // ─── Channel CRUD ───
   const handleChannelSave = useCallback(
@@ -82,18 +86,30 @@ export default function ChannelsDashboard() {
     [setChannels, setExpenses]
   );
 
-  // ─── Channel tasks ───
+  // ─── Standalone tasks linked to channels ───
+  const teamMembers = useMemo(() => employees.map((e) => e.name), [employees]);
+
   const handleToggleTask = useCallback(
-    (channelId: number, taskId: number) => setChannels((prev) => toggleChannelTask(prev, channelId, taskId)),
-    [setChannels]
+    (_channelId: number, taskId: number) => {
+      setStandaloneTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, status: t.status === "done" ? "todo" : "done" } : t
+        )
+      );
+    },
+    [setStandaloneTasks]
   );
   const handleAddTask = useCallback(
-    (channelId: number, task: ChannelTask) => setChannels((prev) => addChannelTask(prev, channelId, task)),
-    [setChannels]
+    (_channelId: number, task: StandaloneTask) => {
+      setStandaloneTasks((prev) => [...prev, task]);
+    },
+    [setStandaloneTasks]
   );
   const handleDeleteTask = useCallback(
-    (channelId: number, taskId: number) => setChannels((prev) => deleteChannelTask(prev, channelId, taskId)),
-    [setChannels]
+    (_channelId: number, taskId: number) => {
+      setStandaloneTasks((prev) => prev.filter((t) => t.id !== taskId));
+    },
+    [setStandaloneTasks]
   );
 
   // Inline save helpers
@@ -124,13 +140,13 @@ export default function ChannelsDashboard() {
     return groups.map((g) => {
       const groupChannels = channels.filter((c) => c.group === g.id);
       const groupChannelIds = groupChannels.map((c) => c.id);
-      const income = totalRevenue(leads, groupChannelIds, averageCheck);
+      const income = totalRevenue(filteredLeads, groupChannelIds, averageCheck, productTypes);
       const groupExpenses = groupChannels.reduce(
-        (sum, c) => sum + totalExpensesForChannel(expenses, c.id),
+        (sum, c) => sum + totalExpensesForChannel(filteredExpenses, c.id),
         0
       );
       const romi = channelRomi(income, groupExpenses);
-      const leadCount = leads.filter((l) => groupChannelIds.includes(l.channelId)).length;
+      const leadCount = filteredLeads.filter((l) => groupChannelIds.includes(l.channelId)).length;
       return {
         id: g.id,
         label: g.label,
@@ -141,7 +157,7 @@ export default function ChannelsDashboard() {
         romi,
       };
     });
-  }, [channels, leads, expenses, averageCheck]);
+  }, [channels, filteredLeads, filteredExpenses, averageCheck, productTypes]);
 
   const profit = totalRev - channelExpensesTotal;
   const dailyPct = dailyLeadPlan > 0 ? Math.min(100, Math.round((todayLeads.length / dailyLeadPlan) * 100)) : 0;
@@ -171,14 +187,14 @@ export default function ChannelsDashboard() {
   const isProfit = profit >= 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-black text-gray-900">Рекламные каналы</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              {channels.length} канал{channels.length === 1 ? "" : channels.length < 5 ? "а" : "ов"} · {leads.length} лид{leads.length === 1 ? "" : leads.length < 5 ? "а" : "ов"}
+            <h1 className="text-2xl font-black text-gray-900 dark:text-white">Рекламные каналы</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              {channels.length} канал{channels.length === 1 ? "" : channels.length < 5 ? "а" : "ов"} · {filteredLeads.length} лид{filteredLeads.length === 1 ? "" : filteredLeads.length < 5 ? "а" : "ов"}
             </p>
           </div>
           <button
@@ -189,11 +205,23 @@ export default function ChannelsDashboard() {
           </button>
         </div>
 
+        {/* Filters */}
+        {(stores.length > 0 || productTypes.length > 0) && (
+          <div className="mb-4 space-y-2">
+            {stores.length > 0 && (
+              <StoreFilter stores={stores} selectedStoreId={selectedStoreId} onSelect={setSelectedStoreId} />
+            )}
+            {productTypes.length > 0 && (
+              <ProductTypeFilter productTypes={productTypes} selectedProductTypeId={selectedProductTypeId} onSelect={setSelectedProductTypeId} />
+            )}
+          </div>
+        )}
+
         {/* ─── Top stat blocks: 3 columns ─── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
           {/* ═══ Block 1: План на день — HIGHLIGHTED ═══ */}
-          <div className="bg-indigo-50 rounded-2xl border-2 border-indigo-300 shadow-lg p-5 ring-2 ring-indigo-200 ring-offset-2 flex flex-col">
+          <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border-2 border-indigo-300 dark:border-indigo-700 shadow-lg p-5 ring-2 ring-indigo-200 dark:ring-indigo-800 ring-offset-2 dark:ring-offset-gray-900 flex flex-col">
             <p className="text-[10px] uppercase tracking-wider text-indigo-500 mb-3 font-bold">
               План на день
             </p>
@@ -209,7 +237,7 @@ export default function ChannelsDashboard() {
                 </div>
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-indigo-400 mb-0.5">Факт</p>
-                  <p className="text-lg font-black text-gray-900">{todayLeads.length}</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white">{todayLeads.length}</p>
                 </div>
               </div>
               {/* Right: BIG ring */}
@@ -224,13 +252,13 @@ export default function ChannelsDashboard() {
           </div>
 
           {/* ═══ Block 2: План на месяц ═══ */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col">
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-3 font-semibold">План на месяц</p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col">
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">План на месяц</p>
             <div className="flex gap-4 flex-1">
               {/* Left: values */}
               <div className="flex flex-col justify-center space-y-2 min-w-0">
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">План</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">План</p>
                   {editingMonthly ? (
                     <div className="flex items-center gap-1">
                       <input
@@ -239,7 +267,7 @@ export default function ChannelsDashboard() {
                         onChange={(e) => setMonthlyInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && saveMonthly()}
                         onBlur={saveMonthly}
-                        className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        className="w-16 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-bold dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         autoFocus
                       />
                     </div>
@@ -254,8 +282,8 @@ export default function ChannelsDashboard() {
                   )}
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Факт</p>
-                  <p className="text-lg font-black text-gray-900">{monthLeads.length}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-0.5">Факт</p>
+                  <p className="text-lg font-black text-gray-900 dark:text-white">{monthLeads.length}</p>
                 </div>
               </div>
               {/* Right: BIG ring */}
@@ -270,25 +298,25 @@ export default function ChannelsDashboard() {
           </div>
 
           {/* ═══ Block 3: Финансы — balance bar ═══ */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex flex-col">
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-4 font-semibold">Финансы</p>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col">
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4 font-semibold">Финансы</p>
             <div className="flex-1 flex flex-col justify-between">
               {/* Values row */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Доходы</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Доходы</p>
                   <p className="text-lg font-black text-green-600">
                     {totalRev.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Расходы</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
                   <p className="text-lg font-black text-red-500">
                     {channelExpensesTotal.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">ROMI</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">ROMI</p>
                   <p className={`text-lg font-black ${overallRomi !== null && overallRomi >= 0 ? "text-green-600" : "text-red-500"}`}>
                     {overallRomi !== null ? `${overallRomi}%` : "—"}
                   </p>
@@ -308,13 +336,13 @@ export default function ChannelsDashboard() {
                   </div>
                   {/* Center mark = ROMI 100% */}
                   <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-                    <div className="w-0.5 h-3 bg-gray-800" />
+                    <div className="w-0.5 h-3 bg-gray-800 dark:bg-gray-200" />
                   </div>
                 </div>
                 {/* Labels under bar */}
                 <div className="flex items-center justify-between mt-1.5">
                   <span className="text-[9px] text-red-400 font-medium">Убыток</span>
-                  <span className="text-[9px] text-gray-500 font-semibold">ROMI 100%</span>
+                  <span className="text-[9px] text-gray-500 dark:text-gray-400 font-semibold">ROMI 100%</span>
                   <span className="text-[9px] text-green-500 font-medium">Прибыль</span>
                 </div>
                 {/* Profit summary */}
@@ -330,7 +358,7 @@ export default function ChannelsDashboard() {
 
         {/* Средний чек — compact editable */}
         <div className="flex items-center gap-3 mb-5">
-          <span className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Средний чек:</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Средний чек:</span>
           {editingCheck ? (
             <div className="flex items-center gap-1">
               <input
@@ -339,7 +367,7 @@ export default function ChannelsDashboard() {
                 onChange={(e) => setCheckInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && saveCheck()}
                 onBlur={saveCheck}
-                className="w-20 px-2 py-1 border border-gray-200 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-20 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-bold dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 autoFocus
               />
               <span className="text-xs text-gray-400">₽</span>
@@ -347,7 +375,7 @@ export default function ChannelsDashboard() {
           ) : (
             <button
               onClick={() => { setCheckInput(String(averageCheck)); setEditingCheck(true); }}
-              className="text-sm font-bold text-gray-900 hover:text-indigo-600 transition-colors"
+              className="text-sm font-bold text-gray-900 dark:text-white dark:text-white hover:text-indigo-600 transition-colors"
               title="Нажмите для редактирования"
             >
               {averageCheck.toLocaleString("ru-RU")} ₽
@@ -364,7 +392,7 @@ export default function ChannelsDashboard() {
               className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
                 filterGroup === f.id
                   ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700"
               }`}
             >
               {f.label}
@@ -377,34 +405,34 @@ export default function ChannelsDashboard() {
           {groupStats.map((g) => (
             <div
               key={g.id}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"
+              className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5"
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-900">{g.label}</h3>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{g.label}</h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
                     {g.leadCount} лид{g.leadCount === 1 ? "" : g.leadCount < 5 ? "а" : "ов"}
                   </span>
-                  <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
                     {g.channelCount} канал{g.channelCount === 1 ? "" : g.channelCount < 5 ? "а" : "ов"}
                   </span>
                 </div>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Доходы</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Доходы</p>
                   <p className="text-sm font-bold text-green-600">
                     {g.income.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">Расходы</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
                   <p className="text-sm font-bold text-red-500">
                     {g.expenses.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400">ROMI</p>
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">ROMI</p>
                   <p className={`text-sm font-bold ${g.romi !== null && g.romi >= 0 ? "text-green-600" : "text-red-500"}`}>
                     {g.romi !== null ? `${g.romi}%` : "—"}
                   </p>
@@ -417,10 +445,12 @@ export default function ChannelsDashboard() {
         {/* Channel cards */}
         <ChannelCardList
           channels={channels}
-          leads={leads}
-          expenses={expenses}
+          leads={filteredLeads}
+          expenses={filteredExpenses}
           averageCheck={averageCheck}
+          standaloneTasks={standaloneTasks}
           filterGroup={filterGroup}
+          productTypes={productTypes}
           onSelectChannel={(ch) => setDetailChannel(ch)}
           onEditChannel={(ch) => setEditChannel({ channel: ch })}
           onDeleteChannel={handleChannelDelete}
@@ -432,9 +462,12 @@ export default function ChannelsDashboard() {
       {detailChannel && (
         <ChannelDetailModal
           channel={detailChannel}
-          leads={leads}
-          expenses={expenses}
+          leads={filteredLeads}
+          expenses={filteredExpenses}
           averageCheck={averageCheck}
+          standaloneTasks={standaloneTasks}
+          employees={teamMembers}
+          productTypes={productTypes}
           onEdit={(ch) => { setDetailChannel(null); setEditChannel({ channel: ch }); }}
           onDelete={(id) => { handleChannelDelete(id); setDetailChannel(null); }}
           onToggleTask={handleToggleTask}
@@ -499,7 +532,7 @@ function ProgressRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-black text-gray-900">{pct}%</span>
+        <span className="text-2xl font-black text-gray-900 dark:text-white">{pct}%</span>
       </div>
     </div>
   );
