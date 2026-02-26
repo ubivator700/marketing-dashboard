@@ -264,23 +264,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const prevProductTypes = useRef<ProductType[]>([]);
 
   // ─── Load from API on mount (after auth resolves) ─────────────
+
+  // Resilient fetch: returns fallback on ANY error (network, JSON parse, HTTP error)
+  const loadJSON = useCallback(async <T,>(url: string, fallback: T): Promise<T> => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return fallback;
+      return await res.json() as T;
+    } catch (err) {
+      console.warn(`[load] ${url} failed:`, err);
+      return fallback;
+    }
+  }, []);
+
   useEffect(() => {
     if (authLoading || !user) return;
     let cancelled = false;
 
-    Promise.all([
-      fetch("/api/projects").then((r) => r.ok ? r.json() : []),
-      fetch("/api/expenses").then((r) => r.ok ? r.json() : []),
-      fetch("/api/channels").then((r) => r.ok ? r.json() : []),
-      fetch("/api/leads").then((r) => r.ok ? r.json() : []),
-      fetch("/api/settings").then((r) => r.ok ? r.json() : {}) as Promise<{ averageCheck?: number; monthlyLeadPlan?: number; monthlyBudget?: number; taxCoefficient?: number }>,
-      fetch("/api/departments").then((r) => r.ok ? r.json() : []),
-      fetch("/api/employees").then((r) => r.ok ? r.json() : []),
-      fetch("/api/standalone-tasks").then((r) => r.ok ? r.json() : []),
-      fetch("/api/recurring-tasks").then((r) => r.ok ? r.json() : []),
-      fetch("/api/stores").then((r) => r.ok ? r.json() : []),
-      fetch("/api/product-types").then((r) => r.ok ? r.json() : []),
-    ]).then(([proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes]) => {
+    (async () => {
+      const [proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes] = await Promise.all([
+        loadJSON<Project[]>("/api/projects", []),
+        loadJSON<Expense[]>("/api/expenses", []),
+        loadJSON<Channel[]>("/api/channels", []),
+        loadJSON<Lead[]>("/api/leads", []),
+        loadJSON<{ averageCheck?: number; monthlyLeadPlan?: number; monthlyBudget?: number; taxCoefficient?: number }>("/api/settings", {}),
+        loadJSON<Department[]>("/api/departments", []),
+        loadJSON<Employee[]>("/api/employees", []),
+        loadJSON<StandaloneTask[]>("/api/standalone-tasks", []),
+        loadJSON<RecurringTask[]>("/api/recurring-tasks", []),
+        loadJSON<Store[]>("/api/stores", []),
+        loadJSON<ProductType[]>("/api/product-types", []),
+      ]);
+
       if (cancelled) return;
 
       setProjects(proj);
@@ -314,10 +329,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       prevProductTypes.current = ptypes;
 
       setDataLoaded(true);
-    });
+    })();
 
     return () => { cancelled = true; };
-  }, [authLoading, user]);
+  }, [authLoading, user, loadJSON]);
 
   // ─── Sync effects: fire API calls when state changes ─────────────
   // Each effect compares current state with the previous ref,

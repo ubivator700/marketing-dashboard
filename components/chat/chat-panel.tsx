@@ -70,21 +70,21 @@ export default function ChatPanel({ onClose }: ChatPanelProps) {
       });
 
       if (!res.ok) {
-        let errorMsg = "\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430";
+        let errorMsg = "Ошибка сервера";
         try {
           const ct = res.headers.get("content-type") || "";
           if (ct.includes("application/json")) {
             const err = await res.json();
             errorMsg = err.error || res.statusText;
           } else {
-            errorMsg = `AI-\u0441\u0435\u0440\u0432\u0438\u0441 \u0432\u0440\u0435\u043c\u0435\u043d\u043d\u043e \u043d\u0435\u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d (${res.status}). \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043f\u043e\u0437\u0436\u0435.`;
+            errorMsg = `AI-сервис временно недоступен (${res.status}). Попробуйте позже.`;
           }
         } catch {
           errorMsg = `${res.status}: ${res.statusText}`;
         }
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: `\u26a0\ufe0f ${errorMsg}` },
+          { role: "assistant", content: `⚠️ ${errorMsg}` },
         ]);
         return;
       }
