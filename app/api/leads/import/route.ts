@@ -27,15 +27,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Файл не загружен" }, { status: 400 });
     }
 
-    // Read the file into a buffer
+    // Read the file into a buffer (use Uint8Array for Node 22 compat with exceljs)
     const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
 
     // Parse Excel
     const wb = new ExcelJS.Workbook();
-    // @ts-expect-error — Node 22 Buffer<ArrayBuffer> vs exceljs Buffer type mismatch
-    await wb.xlsx.load(buffer);
-    const ws = wb.worksheets[0];
+    await wb.xlsx.load(arrayBuffer);
+
+    // Find the data sheet (prefer "Лиды", fall back to first sheet)
+    const ws = wb.worksheets.find((s) => s.name === "Лиды") ?? wb.worksheets[0];
 
     if (!ws) {
       return NextResponse.json({ error: "Пустой файл Excel" }, { status: 400 });
@@ -208,8 +208,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error("[leads/import] error:", err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "Ошибка обработки файла", details: String(err) },
+      { error: `Ошибка обработки файла: ${message}` },
       { status: 500 }
     );
   }
