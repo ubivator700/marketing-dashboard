@@ -4,8 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import type { ProductType, ProductCategory } from "@/types/dashboard";
 import { productCategoryLabels } from "@/lib/leads-data";
 import { useAppContext } from "@/lib/app-context";
-import { useAuth } from "@/lib/auth-context";
-import { productProfit } from "@/lib/overview-utils";
+
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -38,12 +37,6 @@ function fmt(n: number): string {
   return n.toLocaleString("ru-RU");
 }
 
-function fmtShort(n: number): string {
-  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}М`;
-  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(0)}к`;
-  return String(n);
-}
-
 function currentMonthPrefix(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -52,14 +45,8 @@ function currentMonthPrefix(): string {
 // ─── Main Component ─────────────────────────────────────────────
 
 export default function ProductTypesDashboard() {
-  const { productTypes, setProductTypes, leads, taxCoefficient, setTaxCoefficient } = useAppContext();
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-
+  const { productTypes, setProductTypes, leads } = useAppContext();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
-
-  const [editingTax, setEditingTax] = useState(false);
-  const [taxInput, setTaxInput] = useState(String(Math.round(taxCoefficient * 100 * 10) / 10));
 
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -202,78 +189,6 @@ export default function ProductTypesDashboard() {
         </div>
       </div>
 
-      {/* Tax coefficient control */}
-      <div className="bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 rounded-2xl border border-violet-100 dark:border-violet-800 p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-800 flex items-center justify-center text-xl">
-              💳
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-white">Налоговый коэффициент</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Применяется ко всем товарам для расчёта прибыли после налога
-              </p>
-            </div>
-          </div>
-          {editingTax ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                step="0.1"
-                value={taxInput}
-                onChange={(e) => setTaxInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    setTaxCoefficient(Number(taxInput) / 100);
-                    setEditingTax(false);
-                  }
-                  if (e.key === "Escape") setEditingTax(false);
-                }}
-                className="w-20 px-2 py-1.5 border border-violet-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-violet-500 dark:bg-gray-700 dark:border-violet-600 dark:text-white"
-                autoFocus
-              />
-              <span className="text-sm text-gray-500 dark:text-gray-400">%</span>
-              <button
-                onClick={() => {
-                  setTaxCoefficient(Number(taxInput) / 100);
-                  setEditingTax(false);
-                }}
-                className="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-medium hover:bg-violet-700"
-              >
-                OK
-              </button>
-              <button
-                onClick={() => setEditingTax(false)}
-                className="text-xs text-gray-400 hover:text-gray-600"
-              >
-                Отмена
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold text-violet-700 dark:text-violet-300">
-                {(taxCoefficient * 100).toFixed(1)}%
-              </span>
-              {isAdmin && (
-                <button
-                  onClick={() => {
-                    setTaxInput(String(Math.round(taxCoefficient * 100 * 10) / 10));
-                    setEditingTax(true);
-                  }}
-                  className="p-1.5 text-violet-300 hover:text-violet-600 dark:hover:text-violet-200 transition-colors rounded-lg hover:bg-violet-100 dark:hover:bg-violet-800"
-                  title="Изменить"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Create form */}
       {creating && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-violet-200 dark:border-violet-700 p-5">
@@ -317,11 +232,6 @@ export default function ProductTypesDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {productTypes.map((pt) => {
           const stats = ptStats.get(pt.id) ?? { leadCount: 0, profitableCount: 0 };
-          const revenue = stats.profitableCount * pt.avgCheck;
-          const profitPerLead = productProfit(pt.avgCheck, pt.avgMarkup);
-          const totalProfit = Math.round(stats.profitableCount * profitPerLead);
-          const taxAmount = Math.round(totalProfit * taxCoefficient);
-          const profitAfterTax = totalProfit - taxAmount;
 
           return (
             <div
@@ -396,15 +306,9 @@ export default function ProductTypesDashboard() {
 
                   {/* Statistics */}
                   <div className="px-5 pb-4 border-t border-gray-50 dark:border-gray-700 pt-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                       <StatBlock label="Лиды" value={String(stats.leadCount)} color="bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300" />
                       <StatBlock label="Результаты" value={String(stats.profitableCount)} color="bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" />
-                      {revenue > 0 && (
-                        <StatBlock label="Выручка" value={`${fmtShort(revenue)} ₽`} color="bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300" />
-                      )}
-                      {profitAfterTax !== 0 && (
-                        <StatBlock label="Прибыль" value={`${fmtShort(profitAfterTax)} ₽`} sub={taxAmount > 0 ? `налог ${fmtShort(taxAmount)} ₽` : undefined} color="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" />
-                      )}
                     </div>
                   </div>
                 </>

@@ -126,12 +126,6 @@ async function getChannelStats(args: Record<string, unknown>) {
   const storeId = args.storeId as number | undefined;
   const productTypeId = args.productTypeId as number | undefined;
 
-  // Get settings for average check
-  const [settingsRows] = await pool.query<RowDataPacket[]>(
-    "SELECT `key`, `value` FROM settings WHERE `key` = 'averageCheck'"
-  );
-  const averageCheck = settingsRows[0] ? Number(settingsRows[0].value) : 0;
-
   // Lead counts
   let leadSql = `SELECT
     COUNT(*) AS totalLeads,
@@ -143,19 +137,6 @@ async function getChannelStats(args: Record<string, unknown>) {
   if (storeId) { leadSql += " AND store_id = ?"; leadValues.push(storeId); }
   if (productTypeId) { leadSql += " AND id IN (SELECT lead_id FROM lead_product_types WHERE product_type_id = ?)"; leadValues.push(productTypeId); }
   const [leadRows] = await pool.query<RowDataPacket[]>(leadSql, leadValues);
-
-  // Smart revenue: for each profitable lead, use avg of its product types' avg_check, or global
-  let revSql = `SELECT COALESCE(SUM(
-    COALESCE((SELECT AVG(pt.avg_check) FROM lead_product_types lpt JOIN product_types pt ON lpt.product_type_id = pt.id WHERE lpt.lead_id = l.id), ?)
-  ), 0) AS smartRevenue
-    FROM leads l
-    WHERE l.channel_id = ? AND l.result IN ('measurement','sale')`;
-  const revValues: unknown[] = [averageCheck, channelId];
-  if (dateFrom) { revSql += " AND l.date >= ?"; revValues.push(dateFrom); }
-  if (dateTo) { revSql += " AND l.date <= ?"; revValues.push(dateTo); }
-  if (storeId) { revSql += " AND l.store_id = ?"; revValues.push(storeId); }
-  if (productTypeId) { revSql += " AND l.id IN (SELECT lead_id FROM lead_product_types WHERE product_type_id = ?)"; revValues.push(productTypeId); }
-  const [revRows] = await pool.query<RowDataPacket[]>(revSql, revValues);
 
   // Expenses
   let expSql = `SELECT COALESCE(SUM(amount), 0) AS totalExpenses FROM expenses WHERE channel_id = ?`;
@@ -170,18 +151,15 @@ async function getChannelStats(args: Record<string, unknown>) {
 
   const totalLeads = Number(leadRows[0]?.totalLeads ?? 0);
   const profitableLeads = Number(leadRows[0]?.profitableLeads ?? 0);
-  const revenue = Number(revRows[0]?.smartRevenue ?? 0);
   const totalExpenses = Number(expRows[0]?.totalExpenses ?? 0);
-  const romi = totalExpenses > 0 ? Math.round(((revenue - totalExpenses) / totalExpenses) * 100) : null;
+  const costPerLead = totalLeads > 0 ? Math.round(totalExpenses / totalLeads) : null;
 
   return {
     channelName: chRows[0]?.name ?? "Неизвестен",
     totalLeads,
     profitableLeads,
-    revenue,
     totalExpenses,
-    romi,
-    averageCheck,
+    costPerLead,
   };
 }
 
@@ -194,11 +172,6 @@ async function getMonthlyComparison(args: Record<string, unknown>) {
   const channelId = args.channelId as number | undefined;
   const monthlyStoreId = args.storeId as number | undefined;
   const monthlyProductTypeId = args.productTypeId as number | undefined;
-
-  const [settingsRows] = await pool.query<RowDataPacket[]>(
-    "SELECT `key`, `value` FROM settings WHERE `key` = 'averageCheck'"
-  );
-  const averageCheck = settingsRows[0] ? Number(settingsRows[0].value) : 0;
 
   async function getMonthValue(ym: string): Promise<number> {
     const [y, m] = ym.split("-").map(Number);
@@ -220,20 +193,6 @@ async function getMonthlyComparison(args: Record<string, unknown>) {
       const vals: unknown[] = [from, to];
       if (channelId) { sql += " AND channel_id = ?"; vals.push(channelId); }
       if (monthlyStoreId) { sql += " AND store_id = ?"; vals.push(monthlyStoreId); }
-      const [rows] = await pool.query<RowDataPacket[]>(sql, vals);
-      return Number(rows[0]?.total ?? 0);
-    }
-    if (metric === "revenue") {
-      // Smart revenue: avg of product type avgChecks per lead, or global
-      let sql = `SELECT COALESCE(SUM(
-        COALESCE((SELECT AVG(pt.avg_check) FROM lead_product_types lpt JOIN product_types pt ON lpt.product_type_id = pt.id WHERE lpt.lead_id = l.id), ?)
-      ), 0) AS total
-        FROM leads l
-        WHERE l.date >= ? AND l.date <= ? AND l.result IN ('measurement','sale')`;
-      const vals: unknown[] = [averageCheck, from, to];
-      if (channelId) { sql += " AND l.channel_id = ?"; vals.push(channelId); }
-      if (monthlyStoreId) { sql += " AND l.store_id = ?"; vals.push(monthlyStoreId); }
-      if (monthlyProductTypeId) { sql += " AND l.id IN (SELECT lead_id FROM lead_product_types WHERE product_type_id = ?)"; vals.push(monthlyProductTypeId); }
       const [rows] = await pool.query<RowDataPacket[]>(sql, vals);
       return Number(rows[0]?.total ?? 0);
     }
@@ -362,7 +321,7 @@ async function generateExcelReport(args: Record<string, unknown>, collectedFiles
 
 const PAGE_MAP: Record<string, { path: string; description: string }> = {
   dashboard: { path: "/", description: "Главная страница: обзор отделов, задачи, цели, доска задач, календарь" },
-  overview: { path: "/overview", description: "Обзор KPI: графики лидов, расходов, выручки, ROMI по месяцам и каналам" },
+  overview: { path: "/overview", description: "Обзор KPI: графики лидов, расходов, стоимость привлечения по месяцам и каналам" },
   projects: { path: "/projects", description: "Проекты: список всех проектов со стадиями, задачами и дедлайнами" },
   content: { path: "/content", description: "Контент: посты (proposed/approved) и идеи для контент-маркетинга" },
   channels: { path: "/channels", description: "Каналы: маркетинговые каналы (loyalty/digital/offline) с задачами и лидами" },

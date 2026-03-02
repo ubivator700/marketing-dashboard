@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useAppContext } from "@/lib/app-context";
 import { useAuth } from "@/lib/auth-context";
-import { leadsByDate, leadsForMonth, totalRevenue } from "@/lib/lead-utils";
+import { leadsByDate, leadsForMonth } from "@/lib/lead-utils";
 import { totalExpenses } from "@/lib/expense-utils";
 import { calcProjectCompletion } from "@/lib/project-utils";
 import { statusLabels, statusColors, dayTypeLabels } from "@/lib/data";
@@ -204,12 +204,10 @@ export default function MarketingDashboard() {
   const monthLeads = useMemo(() => leadsForMonth(leads, now.getFullYear(), now.getMonth()), [leads]);
   const monthlyPct = monthlyLeadPlan > 0 ? Math.min(100, Math.round((monthLeads.length / monthlyLeadPlan) * 100)) : 0;
 
-  const monthRevenue = useMemo(() => {
-    const profitable = monthLeads.filter((l) => l.result === "measurement" || l.result === "sale");
-    return profitable.length * averageCheck;
-  }, [monthLeads, averageCheck]);
-
   const totalExpAll = useMemo(() => totalExpenses(expenses), [expenses]);
+  const costPerLead = monthLeads.length > 0 ? Math.round(totalExpAll / monthLeads.length) : null;
+  const monthResults = monthLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+  const costPerResult = monthResults > 0 ? Math.round(totalExpAll / monthResults) : null;
 
   // Tasks this month (department tasks)
   const monthTasks = useMemo(() => {
@@ -468,7 +466,7 @@ export default function MarketingDashboard() {
             </div>
 
             {/* KPI cards row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-5">
               {/* Plan completion */}
               <KpiCard
                 label="Выполнение плана"
@@ -477,17 +475,6 @@ export default function MarketingDashboard() {
                 pct={monthlyPct}
                 color={monthlyPct >= 100 ? "#10b981" : monthlyPct >= 50 ? "#f59e0b" : "#ef4444"}
               />
-              {/* Revenue */}
-              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
-                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Доходы</p>
-                <p className="text-2xl font-black text-green-600">
-                  {monthRevenue.toLocaleString("ru-RU")}
-                  <span className="text-sm font-normal text-gray-400 ml-1">₽</span>
-                </p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                  {monthLeads.filter((l) => l.result === "sale").length} продаж · {monthLeads.filter((l) => l.result === "measurement").length} замеров
-                </p>
-              </div>
               {/* Expenses */}
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
                 <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Расходы (общие)</p>
@@ -495,11 +482,27 @@ export default function MarketingDashboard() {
                   {totalExpAll.toLocaleString("ru-RU")}
                   <span className="text-sm font-normal text-gray-400 ml-1">₽</span>
                 </p>
+              </div>
+              {/* Cost per lead */}
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Стоимость лида</p>
+                <p className="text-2xl font-black text-amber-600">
+                  {costPerLead !== null ? costPerLead.toLocaleString("ru-RU") : "—"}
+                  <span className="text-sm font-normal text-gray-400 ml-1">₽</span>
+                </p>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
-                  Чистая прибыль:{" "}
-                  <span className={monthRevenue - totalExpAll >= 0 ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
-                    {(monthRevenue - totalExpAll).toLocaleString("ru-RU")} ₽
-                  </span>
+                  {monthLeads.filter((l) => l.result === "sale").length} продаж · {monthLeads.filter((l) => l.result === "measurement").length} замеров
+                </p>
+              </div>
+              {/* Cost per result */}
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 font-semibold">Стоимость результата</p>
+                <p className="text-2xl font-black text-teal-600">
+                  {costPerResult !== null ? costPerResult.toLocaleString("ru-RU") : "—"}
+                  <span className="text-sm font-normal text-gray-400 ml-1">₽</span>
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
+                  {monthResults} результат{monthResults === 1 ? "" : monthResults < 5 ? "а" : "ов"}
                 </p>
               </div>
               {/* Tasks summary */}

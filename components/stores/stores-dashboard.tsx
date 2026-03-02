@@ -5,9 +5,6 @@ import type { Store, Lead, Expense } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
 import { useAuth } from "@/lib/auth-context";
 import {
-  isProfitable,
-  smartRevenue,
-  smartProfit,
   CHANNEL_COLORS,
   PRODUCT_COLORS,
 } from "@/lib/overview-utils";
@@ -38,7 +35,7 @@ const MONTH_NAMES = [
 
 export default function StoresDashboard() {
   const {
-    stores, setStores, leads, expenses, channels, productTypes, averageCheck, taxCoefficient,
+    stores, setStores, leads, expenses, channels, productTypes,
   } = useAppContext();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -127,12 +124,13 @@ export default function StoresDashboard() {
         monthLeads: Lead[];
         monthExpenses: Expense[];
         totalLeads: number;
+        totalExpenses: number;
         results: number;
         measurements: number;
         sales: number;
         conversion: number;
-        revenue: number;
-        profit: number;
+        costPerLead: number | null;
+        costPerResult: number | null;
         channelBreakdown: { id: number; name: string; leads: number; color: string }[];
         productBreakdown: { id: number; name: string; leads: number; color: string }[];
       }
@@ -147,12 +145,13 @@ export default function StoresDashboard() {
       );
 
       const totalLeads = monthLeads.length;
+      const totalExpensesAmount = monthExpenses.reduce((s, e) => s + e.amount, 0);
       const measurements = monthLeads.filter((l) => l.result === "measurement").length;
       const sales = monthLeads.filter((l) => l.result === "sale").length;
       const results = measurements + sales;
       const conversion = totalLeads > 0 ? Math.round((results / totalLeads) * 100) : 0;
-      const revenue = smartRevenue(monthLeads, averageCheck, productTypes);
-      const profit = smartProfit(monthLeads, taxCoefficient, productTypes);
+      const costPerLead = totalLeads > 0 ? Math.round(totalExpensesAmount / totalLeads) : null;
+      const costPerResult = results > 0 ? Math.round(totalExpensesAmount / results) : null;
 
       // Channel breakdown
       const channelBreakdown = channels
@@ -180,19 +179,20 @@ export default function StoresDashboard() {
         monthLeads,
         monthExpenses,
         totalLeads,
+        totalExpenses: totalExpensesAmount,
         results,
         measurements,
         sales,
         conversion,
-        revenue,
-        profit,
+        costPerLead,
+        costPerResult,
         channelBreakdown,
         productBreakdown,
       });
     }
 
     return map;
-  }, [stores, leads, expenses, channels, productTypes, averageCheck, taxCoefficient, prefix]);
+  }, [stores, leads, expenses, channels, productTypes, prefix]);
 
   // ─── Render ─────────────────────────────────────────────────
 
@@ -291,8 +291,8 @@ export default function StoresDashboard() {
           if (!stats) return null;
 
           const tbuPercent =
-            store.tbu > 0 ? Math.min(Math.round((stats.profit / store.tbu) * 100), 100) : 0;
-          const tbuReached = store.tbu > 0 && stats.profit >= store.tbu;
+            store.tbu > 0 ? Math.min(Math.round((stats.totalExpenses / store.tbu) * 100), 100) : 0;
+          const tbuReached = store.tbu > 0 && stats.totalExpenses >= store.tbu;
 
           return (
             <div
@@ -457,7 +457,7 @@ export default function StoresDashboard() {
               {editingId !== store.id && (
                 <div className="px-5 pb-5 space-y-4">
                   {/* Metric pills */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
                     <MetricPill label="Лиды" value={String(stats.totalLeads)} color="indigo" />
                     <MetricPill
                       label="Результаты"
@@ -466,14 +466,19 @@ export default function StoresDashboard() {
                       color="violet"
                     />
                     <MetricPill
-                      label="Конверсия"
-                      value={`${stats.conversion}%`}
-                      color={stats.conversion >= 50 ? "green" : stats.conversion >= 20 ? "amber" : "red"}
+                      label="Расходы"
+                      value={`${fmtShort(stats.totalExpenses)} \u20bd`}
+                      color="red"
                     />
                     <MetricPill
-                      label="Прибыль"
-                      value={`${fmtShort(stats.profit)} \u20bd`}
-                      color={stats.profit >= 0 ? "blue" : "red"}
+                      label="Стоимость лида"
+                      value={stats.costPerLead !== null ? `${fmtShort(stats.costPerLead)} \u20bd` : "—"}
+                      color="amber"
+                    />
+                    <MetricPill
+                      label="Стоим. результата"
+                      value={stats.costPerResult !== null ? `${fmtShort(stats.costPerResult)} \u20bd` : "—"}
+                      color="teal"
                     />
                   </div>
 
@@ -489,7 +494,7 @@ export default function StoresDashboard() {
                             tbuReached ? "text-emerald-600 dark:text-emerald-400" : "text-gray-600 dark:text-gray-300"
                           }`}
                         >
-                          {fmt(stats.profit)} / {fmt(store.tbu)} {"\u20bd"}
+                          {fmt(stats.totalExpenses)} / {fmt(store.tbu)} {"\u20bd"}
                           <span className="ml-1 text-[10px] font-medium">
                             ({tbuPercent}%)
                           </span>
@@ -557,6 +562,7 @@ const PILL_COLORS: Record<string, string> = {
   blue: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
   red: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300",
   amber: "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  teal: "bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
 };
 
 function MetricPill({

@@ -1,8 +1,8 @@
 "use client";
 
-import type { Channel, Lead, Expense, StandaloneTask, ProductType } from "@/types/dashboard";
+import type { Channel, Lead, Expense, StandaloneTask } from "@/types/dashboard";
 import { channelGroupLabels, channelGroupColors } from "@/lib/channels-data";
-import { leadsByChannel, channelRevenue, channelRomi } from "@/lib/lead-utils";
+import { leadsByChannel } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
 import ModalShell from "@/components/dashboard/modal-shell";
 import ChannelTaskList from "./channel-task-list";
@@ -11,10 +11,8 @@ interface ChannelDetailModalProps {
   channel: Channel;
   leads: Lead[];
   expenses: Expense[];
-  averageCheck: number;
   standaloneTasks: StandaloneTask[];
   employees: string[];
-  productTypes?: ProductType[];
   onEdit: (channel: Channel) => void;
   onDelete: (channelId: number) => void;
   onToggleTask: (channelId: number, taskId: number) => void;
@@ -27,10 +25,8 @@ export default function ChannelDetailModal({
   channel,
   leads,
   expenses,
-  averageCheck,
   standaloneTasks,
   employees,
-  productTypes,
   onEdit,
   onDelete,
   onToggleTask,
@@ -39,9 +35,10 @@ export default function ChannelDetailModal({
   onClose,
 }: ChannelDetailModalProps) {
   const chLeads = leadsByChannel(leads, channel.id);
-  const revenue = channelRevenue(leads, channel.id, averageCheck, productTypes);
   const chExpenses = totalExpensesForChannel(expenses, channel.id);
-  const romi = channelRomi(revenue, chExpenses);
+  const costPerLead = chLeads.length > 0 ? Math.round(chExpenses / chLeads.length) : null;
+  const chResults = chLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+  const costPerResult = chResults > 0 ? Math.round(chExpenses / chResults) : null;
   const groupColor = channelGroupColors[channel.group];
 
   return (
@@ -63,17 +60,19 @@ export default function ChannelDetailModal({
           <p className="text-lg font-bold text-gray-900">{chLeads.length}</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3">
-          <p className="text-xs text-gray-500">Прибыль</p>
-          <p className="text-lg font-bold text-green-600">{revenue.toLocaleString("ru-RU")} ₽</p>
-        </div>
-        <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-500">Расходы</p>
           <p className="text-lg font-bold text-red-500">{chExpenses.toLocaleString("ru-RU")} ₽</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3">
-          <p className="text-xs text-gray-500">ROMI</p>
-          <p className={`text-lg font-bold ${romi !== null && romi >= 0 ? "text-green-600" : "text-red-500"}`}>
-            {romi !== null ? `${romi}%` : "—"}
+          <p className="text-xs text-gray-500">Стоимость лида</p>
+          <p className="text-lg font-bold text-amber-600">
+            {costPerLead !== null ? `${costPerLead.toLocaleString("ru-RU")} ₽` : "—"}
+          </p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Стоимость результата</p>
+          <p className="text-lg font-bold text-teal-600">
+            {costPerResult !== null ? `${costPerResult.toLocaleString("ru-RU")} ₽` : "—"}
           </p>
         </div>
       </div>
