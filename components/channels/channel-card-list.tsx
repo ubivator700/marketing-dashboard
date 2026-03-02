@@ -1,23 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Channel, ChannelGroup, Lead, Expense, StandaloneTask, ProductType } from "@/types/dashboard";
+import type { Channel, ChannelGroup, Lead, Expense, StandaloneTask } from "@/types/dashboard";
 import {
   channelGroupLabels,
   channelGroupColors,
   channelGroupOrder,
 } from "@/lib/channels-data";
-import { leadsByChannel, channelRevenue, channelRomi } from "@/lib/lead-utils";
+import { leadsByChannel } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
 
 interface ChannelCardListProps {
   channels: Channel[];
   leads: Lead[];
   expenses: Expense[];
-  averageCheck: number;
   standaloneTasks: StandaloneTask[];
   filterGroup: ChannelGroup | null;
-  productTypes?: ProductType[];
   onSelectChannel: (channel: Channel) => void;
   onEditChannel: (channel: Channel) => void;
   onDeleteChannel: (channelId: number) => void;
@@ -27,10 +25,8 @@ export default function ChannelCardList({
   channels,
   leads,
   expenses,
-  averageCheck,
   standaloneTasks,
   filterGroup,
-  productTypes,
   onSelectChannel,
   onEditChannel,
   onDeleteChannel,
@@ -88,12 +84,12 @@ export default function ChannelCardList({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {groupChannels.map((channel) => {
                 const chLeads = leadsByChannel(leads, channel.id);
-                const revenue = channelRevenue(leads, channel.id, averageCheck, productTypes);
                 const chExpenses = totalExpensesForChannel(expenses, channel.id);
-                const romi = channelRomi(revenue, chExpenses);
                 const chTasks = standaloneTasks.filter((t) => t.channelId === channel.id);
                 const doneTasks = chTasks.filter((t) => t.status === "done").length;
-                const profit = revenue - chExpenses;
+                const costPerLead = chLeads.length > 0 ? Math.round(chExpenses / chLeads.length) : null;
+                const chResults = chLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+                const costPerResult = chResults > 0 ? Math.round(chExpenses / chResults) : null;
 
                 // Leads today for this channel
                 const chLeadsToday = chLeads.filter((l) => l.date === todayKey).length;
@@ -168,14 +164,7 @@ export default function ChannelCardList({
                       </div>
 
                       {/* Metrics grid */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-3 border-t border-gray-100">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Прибыль</p>
-                          <p className="text-sm font-bold text-green-600">
-                            {revenue > 0 ? `${(revenue / 1000).toFixed(0)}к` : "0"}
-                            <span className="text-[10px] font-normal text-gray-400"> ₽</span>
-                          </p>
-                        </div>
+                      <div className="grid grid-cols-3 gap-3 py-3 border-t border-gray-100">
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Расходы</p>
                           <p className="text-sm font-bold text-red-500">
@@ -184,28 +173,18 @@ export default function ChannelCardList({
                           </p>
                         </div>
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">ROMI</p>
-                          <p className={`text-sm font-bold ${romi !== null && romi >= 0 ? "text-green-600" : romi !== null ? "text-red-500" : "text-gray-300"}`}>
-                            {romi !== null ? `${romi}%` : "—"}
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Стоим. лида</p>
+                          <p className="text-sm font-bold text-amber-600">
+                            {costPerLead !== null ? `${costPerLead.toLocaleString("ru-RU")}` : "—"}
+                            <span className="text-[10px] font-normal text-gray-400"> ₽</span>
                           </p>
                         </div>
-                      </div>
-
-                      {/* Profit bar */}
-                      <div className="mt-3">
-                        <div className="flex justify-between text-[10px] text-gray-400 mb-1">
-                          <span>Чистая прибыль</span>
-                          <span className={profit >= 0 ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
-                            {profit >= 0 ? "+" : ""}{profit.toLocaleString("ru-RU")} ₽
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          {chExpenses > 0 && (
-                            <div
-                              className={`h-full rounded-full transition-all ${profit >= 0 ? "bg-green-500" : "bg-red-400"}`}
-                              style={{ width: `${Math.min(100, revenue > 0 ? (revenue / (revenue + chExpenses)) * 100 : 0)}%` }}
-                            />
-                          )}
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Стоим. рез.</p>
+                          <p className="text-sm font-bold text-teal-600">
+                            {costPerResult !== null ? `${costPerResult.toLocaleString("ru-RU")}` : "—"}
+                            <span className="text-[10px] font-normal text-gray-400"> ₽</span>
+                          </p>
                         </div>
                       </div>
 

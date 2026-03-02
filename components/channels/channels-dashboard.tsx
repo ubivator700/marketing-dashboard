@@ -8,7 +8,7 @@ import {
   updateChannel,
   deleteChannel as removeChannel,
 } from "@/lib/channel-utils";
-import { channelRomi, totalRevenue, leadsByDate, leadsForMonth } from "@/lib/lead-utils";
+import { leadsByDate, leadsForMonth } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
 import ChannelCardList from "./channel-card-list";
 import ChannelDetailModal from "./channel-detail-modal";
@@ -43,15 +43,40 @@ export default function ChannelsDashboard() {
   const [editingMonthly, setEditingMonthly] = useState(false);
   const [monthlyInput, setMonthlyInput] = useState(String(monthlyLeadPlan));
 
+  // ─── Month picker state ───
+  const now = useMemo(() => new Date(), []);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-based
+
+  const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
+
+  const prevMonth = () => {
+    if (selectedMonth === 0) { setSelectedYear((y) => y - 1); setSelectedMonth(11); }
+    else setSelectedMonth((m) => m - 1);
+  };
+  const nextMonth = () => {
+    if (selectedMonth === 11) { setSelectedYear((y) => y + 1); setSelectedMonth(0); }
+    else setSelectedMonth((m) => m + 1);
+  };
+  const goCurrentMonth = () => {
+    setSelectedYear(now.getFullYear());
+    setSelectedMonth(now.getMonth());
+  };
+
+  const monthLabel = new Date(selectedYear, selectedMonth).toLocaleDateString("ru-RU", {
+    month: "long",
+    year: "numeric",
+  });
+
   // ─── Date keys ───
   const todayKey = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }, []);
-  const monthPrefix = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  }, []);
+  const monthPrefix = useMemo(
+    () => `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`,
+    [selectedYear, selectedMonth]
+  );
 
   // ─── Month-filtered data (all financial metrics use current month only) ───
   const monthFilteredLeads = useMemo(
@@ -63,18 +88,14 @@ export default function ChannelsDashboard() {
     [filteredExpenses, monthPrefix]
   );
 
-  // ─── Financials (current month) ───
-  const channelIds = useMemo(() => channels.map((c) => c.id), [channels]);
-  const totalRev = useMemo(() => totalRevenue(monthFilteredLeads, channelIds, averageCheck, productTypes), [monthFilteredLeads, channelIds, averageCheck, productTypes]);
+  // ─── Expenses (current month) ───
   const channelExpensesTotal = useMemo(() => {
     return channels.reduce((sum, c) => sum + totalExpensesForChannel(monthFilteredExpenses, c.id), 0);
   }, [channels, monthFilteredExpenses]);
-  const overallRomi = useMemo(() => channelRomi(totalRev, channelExpensesTotal), [totalRev, channelExpensesTotal]);
 
   // ─── Daily/monthly leads (for plan blocks) ───
   const todayLeads = useMemo(() => leadsByDate(filteredLeads, todayKey), [filteredLeads, todayKey]);
-  const now = new Date();
-  const monthLeads = useMemo(() => leadsForMonth(filteredLeads, now.getFullYear(), now.getMonth()), [filteredLeads]);
+  const monthLeads = useMemo(() => leadsForMonth(filteredLeads, selectedYear, selectedMonth), [filteredLeads, selectedYear, selectedMonth]);
 
   // ─── Channel CRUD ───
   const handleChannelSave = useCallback(
@@ -156,51 +177,32 @@ export default function ChannelsDashboard() {
     return groups.map((g) => {
       const groupChannels = channels.filter((c) => c.group === g.id);
       const groupChannelIds = groupChannels.map((c) => c.id);
-      const income = totalRevenue(monthFilteredLeads, groupChannelIds, averageCheck, productTypes);
       const groupExpenses = groupChannels.reduce(
         (sum, c) => sum + totalExpensesForChannel(monthFilteredExpenses, c.id),
         0
       );
-      const romi = channelRomi(income, groupExpenses);
-      const leadCount = monthFilteredLeads.filter((l) => groupChannelIds.includes(l.channelId)).length;
+      const groupLeads = monthFilteredLeads.filter((l) => groupChannelIds.includes(l.channelId));
+      const leadCount = groupLeads.length;
+      const resultCount = groupLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+      const costPerLead = leadCount > 0 ? Math.round(groupExpenses / leadCount) : null;
+      const costPerResult = resultCount > 0 ? Math.round(groupExpenses / resultCount) : null;
       return {
         id: g.id,
         label: g.label,
         channelCount: groupChannels.length,
         leadCount,
-        income,
         expenses: groupExpenses,
-        romi,
+        costPerLead,
+        costPerResult,
       };
     });
-  }, [channels, monthFilteredLeads, monthFilteredExpenses, averageCheck, productTypes]);
+  }, [channels, monthFilteredLeads, monthFilteredExpenses]);
 
-  const profit = totalRev - channelExpensesTotal;
   const dailyPct = dailyLeadPlan > 0 ? Math.min(100, Math.round((todayLeads.length / dailyLeadPlan) * 100)) : 0;
   const monthlyPct = monthlyLeadPlan > 0 ? Math.min(100, Math.round((monthLeads.length / monthlyLeadPlan) * 100)) : 0;
-
-  // ─── Balance bar calculation ───
-  // The bar represents the financial balance. Center = ROMI 100% (breakeven: revenue = 2 × expenses).
-  // Left end = all expenses, no revenue. Right end = huge profit.
-  // Position: revenue / (revenue + expenses) maps to the bar.
-  // Center (50%) = breakeven = revenue equals expenses × 2 (ROMI = 100%)
-  // We use: position = revenue / (revenue + expenses) if expenses > 0
-  // But ROMI 100% means revenue = 2*expenses, so position at ROMI=100% should be center.
-  // Let's define: balance = revenue / (2 * expenses) clamped 0..1, center = 0.5
-  // If expenses = 0 and revenue > 0, full green.
-  const balanceRatio = useMemo(() => {
-    if (channelExpensesTotal === 0 && totalRev === 0) return 0.5;
-    if (channelExpensesTotal === 0) return 1;
-    // At ROMI=100%, revenue = 2*expenses, ratio = 1 → maps to center (0.5)
-    // At ROMI=0%, revenue = expenses, ratio = 0.5 → maps to 0.25
-    // At ROMI=-100%, revenue = 0, ratio = 0 → maps to 0
-    // At ROMI=200%, revenue = 3*expenses, ratio = 1.5 → maps to 0.75
-    const ratio = totalRev / (2 * channelExpensesTotal);
-    return Math.min(Math.max(ratio, 0), 1);
-  }, [totalRev, channelExpensesTotal]);
-
-  const balancePct = Math.round(balanceRatio * 100);
-  const isProfit = profit >= 0;
+  const overallCostPerLead = monthFilteredLeads.length > 0 ? Math.round(channelExpensesTotal / monthFilteredLeads.length) : null;
+  const overallResults = monthFilteredLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+  const overallCostPerResult = overallResults > 0 ? Math.round(channelExpensesTotal / overallResults) : null;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -210,7 +212,7 @@ export default function ChannelsDashboard() {
           <div>
             <h1 className="text-2xl font-black text-gray-900 dark:text-white">Рекламные каналы</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {channels.length} канал{channels.length === 1 ? "" : channels.length < 5 ? "а" : "ов"} · {monthFilteredLeads.length} лид{monthFilteredLeads.length === 1 ? "" : monthFilteredLeads.length < 5 ? "а" : "ов"} за месяц
+              {channels.length} канал{channels.length === 1 ? "" : channels.length < 5 ? "а" : "ов"} · {monthFilteredLeads.length} лид{monthFilteredLeads.length === 1 ? "" : monthFilteredLeads.length < 5 ? "а" : "ов"} за {isCurrentMonth ? "месяц" : monthLabel}
             </p>
           </div>
           <button
@@ -233,10 +235,40 @@ export default function ChannelsDashboard() {
           </div>
         )}
 
-        {/* ─── Top stat blocks: 3 columns ─── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* ─── Month picker ─── */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={prevMonth}
+              className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm transition-colors"
+            >
+              ◂
+            </button>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-white capitalize min-w-[160px] text-center">
+              {monthLabel}
+            </h3>
+            <button
+              onClick={nextMonth}
+              className="px-3 py-1.5 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg text-sm transition-colors"
+            >
+              ▸
+            </button>
+          </div>
+          {!isCurrentMonth && (
+            <button
+              onClick={goCurrentMonth}
+              className="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg text-sm font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+            >
+              Текущий месяц
+            </button>
+          )}
+        </div>
 
-          {/* ═══ Block 1: План на день — HIGHLIGHTED ═══ */}
+        {/* ─── Top stat blocks ─── */}
+        <div className={`grid grid-cols-1 ${isCurrentMonth ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4 mb-6`}>
+
+          {/* ═══ Block 1: План на день — only for current month ═══ */}
+          {isCurrentMonth && (
           <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl border-2 border-indigo-300 dark:border-indigo-700 shadow-lg p-5 ring-2 ring-indigo-200 dark:ring-indigo-800 ring-offset-2 dark:ring-offset-gray-900 flex flex-col">
             <p className="text-[10px] uppercase tracking-wider text-indigo-500 mb-3 font-bold">
               План на день
@@ -266,6 +298,7 @@ export default function ChannelsDashboard() {
               </div>
             </div>
           </div>
+          )}
 
           {/* ═══ Block 2: План на месяц ═══ */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col">
@@ -313,18 +346,11 @@ export default function ChannelsDashboard() {
             </div>
           </div>
 
-          {/* ═══ Block 3: Финансы — balance bar ═══ */}
+          {/* ═══ Block 3: Стоимость привлечения ═══ */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col">
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4 font-semibold">Финансы</p>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4 font-semibold">Стоимость привлечения</p>
             <div className="flex-1 flex flex-col justify-between">
-              {/* Values row */}
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Доходы</p>
-                  <p className="text-lg font-black text-green-600">
-                    {totalRev.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
-                  </p>
-                </div>
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
                   <p className="text-lg font-black text-red-500">
@@ -332,40 +358,16 @@ export default function ChannelsDashboard() {
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">ROMI</p>
-                  <p className={`text-lg font-black ${overallRomi !== null && overallRomi >= 0 ? "text-green-600" : "text-red-500"}`}>
-                    {overallRomi !== null ? `${overallRomi}%` : "—"}
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость лида</p>
+                  <p className="text-lg font-black text-amber-600">
+                    {overallCostPerLead !== null ? `${overallCostPerLead.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
-              </div>
-
-              {/* Balance bar */}
-              <div className="mt-4">
-                <div className="relative">
-                  {/* Bar track */}
-                  <div className="h-3 rounded-full overflow-hidden flex" style={{ background: "linear-gradient(to right, #fecaca, #fef3c7 40%, #d1fae5 60%, #bbf7d0)" }}>
-                    {/* Fill indicator */}
-                    <div
-                      className={`h-full transition-all duration-500 rounded-full ${isProfit ? "bg-green-500" : "bg-red-400"}`}
-                      style={{ width: `${balancePct}%` }}
-                    />
-                  </div>
-                  {/* Center mark = ROMI 100% */}
-                  <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-                    <div className="w-0.5 h-3 bg-gray-800 dark:bg-gray-200" />
-                  </div>
-                </div>
-                {/* Labels under bar */}
-                <div className="flex items-center justify-between mt-1.5">
-                  <span className="text-[9px] text-red-400 font-medium">Убыток</span>
-                  <span className="text-[9px] text-gray-500 dark:text-gray-400 font-semibold">ROMI 100%</span>
-                  <span className="text-[9px] text-green-500 font-medium">Прибыль</span>
-                </div>
-                {/* Profit summary */}
-                <div className="text-center mt-2">
-                  <span className={`text-sm font-bold ${isProfit ? "text-green-600" : "text-red-500"}`}>
-                    {isProfit ? "+" : ""}{profit.toLocaleString("ru-RU")} ₽
-                  </span>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость результата</p>
+                  <p className="text-lg font-black text-teal-600">
+                    {overallCostPerResult !== null ? `${overallCostPerResult.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                  </p>
                 </div>
               </div>
             </div>
@@ -416,7 +418,7 @@ export default function ChannelsDashboard() {
           ))}
         </div>
 
-        {/* Group stats: income, expenses, ROMI per direction */}
+        {/* Group stats: expenses, cost per lead per direction */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           {groupStats.map((g) => (
             <div
@@ -436,21 +438,21 @@ export default function ChannelsDashboard() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Доходы</p>
-                  <p className="text-sm font-bold text-green-600">
-                    {g.income.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
                   <p className="text-sm font-bold text-red-500">
                     {g.expenses.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">ROMI</p>
-                  <p className={`text-sm font-bold ${g.romi !== null && g.romi >= 0 ? "text-green-600" : "text-red-500"}`}>
-                    {g.romi !== null ? `${g.romi}%` : "—"}
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость лида</p>
+                  <p className="text-sm font-bold text-amber-600">
+                    {g.costPerLead !== null ? `${g.costPerLead.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость результата</p>
+                  <p className="text-sm font-bold text-teal-600">
+                    {g.costPerResult !== null ? `${g.costPerResult.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
                   </p>
                 </div>
               </div>
@@ -463,10 +465,8 @@ export default function ChannelsDashboard() {
           channels={channels}
           leads={monthFilteredLeads}
           expenses={monthFilteredExpenses}
-          averageCheck={averageCheck}
           standaloneTasks={standaloneTasks}
           filterGroup={filterGroup}
-          productTypes={productTypes}
           onSelectChannel={(ch) => setDetailChannel(ch)}
           onEditChannel={(ch) => setEditChannel({ channel: ch })}
           onDeleteChannel={handleChannelDelete}
@@ -480,10 +480,8 @@ export default function ChannelsDashboard() {
           channel={detailChannel}
           leads={filteredLeads}
           expenses={filteredExpenses}
-          averageCheck={averageCheck}
           standaloneTasks={standaloneTasks}
           employees={teamMembers}
-          productTypes={productTypes}
           onEdit={(ch) => { setDetailChannel(null); setEditChannel({ channel: ch }); }}
           onDelete={(id) => { handleChannelDelete(id); setDetailChannel(null); }}
           onToggleTask={handleToggleTask}

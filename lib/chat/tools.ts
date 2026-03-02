@@ -55,7 +55,7 @@ export const CHAT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: "get_channel_stats",
       description:
-        "Получить агрегированную статистику по каналу: количество лидов, результативных лидов, выручку, расходы и ROMI. Можно указать период.",
+        "Получить агрегированную статистику по каналу: количество лидов, результативных лидов, расходы и стоимость привлечения лида. Можно указать период.",
       parameters: {
         type: "object",
         properties: {
@@ -80,8 +80,8 @@ export const CHAT_TOOLS: ChatCompletionTool[] = [
         properties: {
           metric: {
             type: "string",
-            enum: ["leads", "expenses", "revenue", "profitable_leads"],
-            description: "Метрика: leads (все лиды), profitable_leads (результативные), expenses (расходы), revenue (выручка)",
+            enum: ["leads", "expenses", "profitable_leads"],
+            description: "Метрика: leads (все лиды), profitable_leads (результативные), expenses (расходы)",
           },
           month1: { type: "string", description: "Первый месяц (YYYY-MM)" },
           month2: { type: "string", description: "Второй месяц (YYYY-MM)" },

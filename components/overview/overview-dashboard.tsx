@@ -31,8 +31,6 @@ function fmtShort(n: number): string {
 export default function OverviewDashboard() {
   const {
     channels,
-    averageCheck,
-    taxCoefficient,
     stores,
     selectedStoreId,
     setSelectedStoreId,
@@ -44,13 +42,13 @@ export default function OverviewDashboard() {
   } = useAppContext();
 
   const stats = useMemo(
-    () => monthlyStatsExtended(filteredLeads, filteredExpenses, channels, averageCheck, 24, productTypes, taxCoefficient),
-    [filteredLeads, filteredExpenses, channels, averageCheck, productTypes, taxCoefficient],
+    () => monthlyStatsExtended(filteredLeads, filteredExpenses, channels, 24, productTypes),
+    [filteredLeads, filteredExpenses, channels, productTypes],
   );
 
   const kpi = useMemo(
-    () => currentMonthKpi(filteredLeads, filteredExpenses, averageCheck, productTypes, taxCoefficient),
-    [filteredLeads, filteredExpenses, averageCheck, productTypes, taxCoefficient],
+    () => currentMonthKpi(filteredLeads, filteredExpenses),
+    [filteredLeads, filteredExpenses],
   );
 
   const yearData = useMemo(() => groupByYearQuarter(stats), [stats]);
@@ -80,14 +78,12 @@ export default function OverviewDashboard() {
         <h2 className="text-sm font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
           Текущий месяц
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <KpiCard label="Лиды" value={String(kpi.leads)} icon="👥" color="indigo" />
           <KpiCard label="Результаты" value={`${kpi.measurements + kpi.sales}`} sub={`${kpi.measurements} замер · ${kpi.sales} продаж`} icon="🎯" color="violet" />
-          <KpiCard label="Выручка" value={`${fmtShort(kpi.revenue)} \u20bd`} icon="💰" color="green" />
-          <KpiCard label="Прибыль" value={`${fmtShort(kpi.profit)} \u20bd`} icon="📈" color="blue" />
           <KpiCard label="Расходы" value={`${fmtShort(kpi.expenses)} \u20bd`} icon="📉" color="red" />
-          <KpiCard label="Итог" value={`${fmtShort(kpi.netResult)} \u20bd`} icon={kpi.netResult >= 0 ? "✅" : "⚠️"} color={kpi.netResult >= 0 ? "emerald" : "red"} />
-          <KpiCard label="ROMI" value={kpi.romi !== null ? `${kpi.romi}%` : "—"} icon="📊" color="amber" />
+          <KpiCard label="Стоимость лида" value={kpi.leads > 0 ? `${fmtShort(Math.round(kpi.expenses / kpi.leads))} \u20bd` : "—"} icon="💰" color="amber" />
+          <KpiCard label="Стоимость результата" value={(kpi.measurements + kpi.sales) > 0 ? `${fmtShort(Math.round(kpi.expenses / (kpi.measurements + kpi.sales)))} \u20bd` : "—"} icon="🎯" color="teal" />
         </div>
       </div>
 
@@ -111,6 +107,7 @@ const COLOR_MAP: Record<string, { bg: string; text: string; iconBg: string }> = 
   red:     { bg: "bg-red-50 dark:bg-red-900/30",     text: "text-red-700 dark:text-red-300",     iconBg: "bg-red-100 dark:bg-red-800" },
   amber:   { bg: "bg-amber-50 dark:bg-amber-900/30",   text: "text-amber-700 dark:text-amber-300",   iconBg: "bg-amber-100 dark:bg-amber-800" },
   emerald: { bg: "bg-emerald-50 dark:bg-emerald-900/30", text: "text-emerald-700 dark:text-emerald-300", iconBg: "bg-emerald-100 dark:bg-emerald-800" },
+  teal:    { bg: "bg-teal-50 dark:bg-teal-900/30",    text: "text-teal-700 dark:text-teal-300",    iconBg: "bg-teal-100 dark:bg-teal-800" },
 };
 
 function KpiCard({
@@ -170,18 +167,9 @@ function YearBlock({ year }: { year: YearStat }) {
         <div className="flex flex-wrap items-center gap-1.5 ml-auto">
           <StatPill label="Лиды" value={String(year.leads)} bg="bg-indigo-50 dark:bg-indigo-900/30" color="text-indigo-700 dark:text-indigo-300" />
           <StatPill label="Рез." value={String(year.measurements + year.sales)} bg="bg-violet-50 dark:bg-violet-900/30" color="text-violet-700 dark:text-violet-300" />
-          <StatPill label="Выручка" value={`${fmtShort(year.revenue)} \u20bd`} bg="bg-green-50 dark:bg-green-900/30" color="text-green-700 dark:text-green-300" />
-          <StatPill label="Прибыль" value={`${fmtShort(year.profit)} \u20bd`} bg="bg-blue-50 dark:bg-blue-900/30" color="text-blue-700 dark:text-blue-300" />
           <StatPill label="Расходы" value={`${fmtShort(year.expenses)} \u20bd`} bg="bg-red-50 dark:bg-red-900/30" color="text-red-600 dark:text-red-300" />
-          <StatPill
-            label="Итог"
-            value={`${fmtShort(year.netResult)} \u20bd`}
-            bg={year.netResult >= 0 ? "bg-emerald-50 dark:bg-emerald-900/30" : "bg-red-50 dark:bg-red-900/30"}
-            color={year.netResult >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}
-          />
-          {year.romi !== null && (
-            <StatPill label="ROMI" value={`${year.romi}%`} bg="bg-amber-50 dark:bg-amber-900/30" color="text-amber-700 dark:text-amber-300" />
-          )}
+          <StatPill label="CPL" value={year.leads > 0 ? `${fmtShort(Math.round(year.expenses / year.leads))} \u20bd` : "—"} bg="bg-amber-50 dark:bg-amber-900/30" color="text-amber-700 dark:text-amber-300" />
+          <StatPill label="CPR" value={(year.measurements + year.sales) > 0 ? `${fmtShort(Math.round(year.expenses / (year.measurements + year.sales)))} \u20bd` : "—"} bg="bg-teal-50 dark:bg-teal-900/30" color="text-teal-700 dark:text-teal-300" />
         </div>
       </button>
 
@@ -235,18 +223,9 @@ function QuarterBlock({ quarter }: { quarter: QuarterStat }) {
         <div className="flex flex-wrap items-center gap-1.5 ml-auto">
           <QStat label="Лиды" value={String(quarter.leads)} bg="bg-indigo-50 dark:bg-indigo-900/30" color="text-indigo-700 dark:text-indigo-300" />
           <QStat label="Рез." value={String(quarter.measurements + quarter.sales)} bg="bg-violet-50 dark:bg-violet-900/30" color="text-violet-700 dark:text-violet-300" />
-          <QStat label="Выручка" value={`${fmtShort(quarter.revenue)} \u20bd`} bg="bg-green-50 dark:bg-green-900/30" color="text-green-700 dark:text-green-300" />
-          <QStat label="Прибыль" value={`${fmtShort(quarter.profit)} \u20bd`} bg="bg-blue-50 dark:bg-blue-900/30" color="text-blue-700 dark:text-blue-300" />
           <QStat label="Расходы" value={`${fmtShort(quarter.expenses)} \u20bd`} bg="bg-red-50 dark:bg-red-900/30" color="text-red-600 dark:text-red-300" />
-          <QStat
-            label="Итог"
-            value={`${fmtShort(quarter.netResult)} \u20bd`}
-            bg={quarter.netResult >= 0 ? "bg-emerald-50 dark:bg-emerald-900/30" : "bg-red-50 dark:bg-red-900/30"}
-            color={quarter.netResult >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}
-          />
-          {quarter.romi !== null && (
-            <QStat label="ROMI" value={`${quarter.romi}%`} bg="bg-amber-50 dark:bg-amber-900/30" color="text-amber-700 dark:text-amber-300" />
-          )}
+          <QStat label="CPL" value={quarter.leads > 0 ? `${fmtShort(Math.round(quarter.expenses / quarter.leads))} \u20bd` : "—"} bg="bg-amber-50 dark:bg-amber-900/30" color="text-amber-700 dark:text-amber-300" />
+          <QStat label="CPR" value={(quarter.measurements + quarter.sales) > 0 ? `${fmtShort(Math.round(quarter.expenses / (quarter.measurements + quarter.sales)))} \u20bd` : "—"} bg="bg-teal-50 dark:bg-teal-900/30" color="text-teal-700 dark:text-teal-300" />
         </div>
       </button>
 
@@ -278,7 +257,9 @@ function QStat({ label, value, bg, color }: { label: string; value: string; bg: 
 function MonthCard({ month }: { month: MonthStatExtended }) {
   const maxChannelLeads = Math.max(...month.channelBreakdown.map((c) => c.leads), 1);
   const maxProductLeads = Math.max(...month.productBreakdown.map((p) => p.leads), 1);
-  const isPositiveResult = month.netResult >= 0;
+  const costPerLead = month.leads > 0 ? Math.round(month.expenses / month.leads) : 0;
+  const monthResults = month.measurements + month.sales;
+  const costPerResult = monthResults > 0 ? Math.round(month.expenses / monthResults) : 0;
 
   return (
     <div className="bg-gray-50/80 dark:bg-gray-750/50 rounded-xl border border-gray-100 dark:border-gray-600 p-4 hover:shadow-sm transition-shadow">
@@ -290,8 +271,8 @@ function MonthCard({ month }: { month: MonthStatExtended }) {
         )}
       </div>
 
-      {/* Main metrics — 2-column layout */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 mb-4">
+      {/* Main metrics */}
+      <div className="grid grid-cols-3 gap-x-3 gap-y-2.5 mb-4">
         <Metric label="Лиды" value={String(month.leads)} color="text-indigo-600" />
         <Metric
           label="Результаты"
@@ -299,34 +280,17 @@ function MonthCard({ month }: { month: MonthStatExtended }) {
           sub={`${month.measurements} зам. · ${month.sales} прод.`}
           color="text-violet-600"
         />
-        <Metric label="Выручка" value={`${fmtShort(month.revenue)} \u20bd`} color="text-green-600" />
-        <Metric label="Прибыль" value={`${fmtShort(month.profit)} \u20bd`} color="text-blue-600" />
         <Metric label="Расходы" value={`${fmtShort(month.expenses)} \u20bd`} color="text-red-500" />
         <Metric
-          label="ROMI"
-          value={month.romi !== null ? `${month.romi}%` : "\u2014"}
-          color={month.romi !== null && month.romi >= 0 ? "text-amber-600" : "text-red-500"}
+          label="Стоим. лида"
+          value={costPerLead > 0 ? `${fmtShort(costPerLead)} \u20bd` : "\u2014"}
+          color="text-amber-600"
         />
-      </div>
-
-      {/* Net result bar */}
-      <div className="mb-4 rounded-lg bg-white dark:bg-gray-800 p-3 border border-gray-100 dark:border-gray-600">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400">Итог</span>
-          <span className={`text-sm font-bold ${isPositiveResult ? "text-emerald-600" : "text-red-600"}`}>
-            {isPositiveResult ? "+" : ""}{fmt(month.netResult)} {"\u20bd"}
-          </span>
-        </div>
-        <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-          {month.revenue > 0 && (
-            <div
-              className={`h-full rounded-full transition-all ${isPositiveResult ? "bg-emerald-400" : "bg-red-400"}`}
-              style={{
-                width: `${Math.min(100, Math.abs(month.netResult) > 0 ? (Math.abs(month.netResult) / Math.max(month.revenue, month.expenses)) * 100 : 0)}%`,
-              }}
-            />
-          )}
-        </div>
+        <Metric
+          label="Стоим. результата"
+          value={costPerResult > 0 ? `${fmtShort(costPerResult)} \u20bd` : "\u2014"}
+          color="text-teal-600"
+        />
       </div>
 
       {/* Breakdowns side-by-side */}

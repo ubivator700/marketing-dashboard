@@ -1,4 +1,4 @@
-import type { Lead, Expense, Channel, ProductType } from "@/types/dashboard";
+import type { Lead, Expense, Channel } from "@/types/dashboard";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -10,11 +10,7 @@ export interface MonthStat {
   profitableLeads: number;
   measurements: number;
   sales: number;
-  revenue: number;
-  profit: number;      // прибыль после налогов
   expenses: number;
-  netResult: number;   // profit - expenses (итог)
-  romi: number | null;
 }
 
 export interface ChannelPieItem {
@@ -60,59 +56,6 @@ export function isProfitable(lead: Lead): boolean {
   return lead.result === "measurement" || lead.result === "sale";
 }
 
-/** Smart revenue: use product type avgCheck when available, otherwise global.
- *  When a lead has multiple product types, use the average of their avgChecks. */
-export function smartRevenue(leads: Lead[], globalAvgCheck: number, productTypes?: ProductType[]): number {
-  const ptMap = productTypes?.length
-    ? new Map(productTypes.map((pt) => [pt.id, pt.avgCheck]))
-    : null;
-  return leads.filter(isProfitable).reduce((sum, lead) => {
-    if (ptMap && lead.productTypeIds.length > 0) {
-      const checks = lead.productTypeIds.map((id) => ptMap.get(id) || 0).filter((c) => c > 0);
-      if (checks.length > 0) return sum + checks.reduce((a, b) => a + b, 0) / checks.length;
-    }
-    return sum + globalAvgCheck;
-  }, 0);
-}
-
-/** Profit per unit of a product type.
- *  Formula: avgCheck - avgCheck / (1 + avgMarkup/100)
- *  Example: avgCheck=10000, markup=30 → 10000 - 10000/1.3 ≈ 2308 */
-export function productProfit(avgCheck: number, avgMarkup: number): number {
-  if (avgMarkup <= 0 || avgCheck <= 0) return 0;
-  return avgCheck - avgCheck / (1 + avgMarkup / 100);
-}
-
-/** Smart profit after tax: analogous to smartRevenue but computes per-lead profit.
- *  For multi-product leads — averages their per-product profits.
- *  Leads without product types contribute 0 profit (no markup info).
- *  Final: rawProfit * (1 - taxCoefficient). */
-export function smartProfit(
-  leads: Lead[],
-  taxCoefficient: number,
-  productTypes?: ProductType[],
-): number {
-  const ptMap = productTypes?.length
-    ? new Map(productTypes.map((pt) => [pt.id, { avgCheck: pt.avgCheck, avgMarkup: pt.avgMarkup }]))
-    : null;
-
-  const rawProfit = leads.filter(isProfitable).reduce((sum, lead) => {
-    if (ptMap && lead.productTypeIds.length > 0) {
-      const profits = lead.productTypeIds
-        .map((id) => {
-          const pt = ptMap.get(id);
-          return pt ? productProfit(pt.avgCheck, pt.avgMarkup) : 0;
-        })
-        .filter((p) => p > 0);
-      if (profits.length > 0) return sum + profits.reduce((a, b) => a + b, 0) / profits.length;
-    }
-    return sum; // no product type → 0 profit contribution
-  }, 0);
-
-  const tax = rawProfit * taxCoefficient;
-  return Math.round(rawProfit - tax);
-}
-
 function leadsForMonth(leads: Lead[], year: number, month: number): Lead[] {
   const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
   return leads.filter((l) => l.date.startsWith(prefix));
@@ -128,10 +71,7 @@ function expensesForMonth(expenses: Expense[], year: number, month: number): Exp
 export function monthlyStats(
   leads: Lead[],
   expenses: Expense[],
-  avgCheck: number,
   monthCount: number = 12,
-  productTypes?: ProductType[],
-  taxCoefficient: number = 0,
 ): MonthStat[] {
   const now = new Date();
   const result: MonthStat[] = [];
@@ -146,11 +86,7 @@ export function monthlyStats(
     const profitableCount = mLeads.filter(isProfitable).length;
     const measurements = mLeads.filter((l) => l.result === "measurement").length;
     const sales = mLeads.filter((l) => l.result === "sale").length;
-    const revenue = smartRevenue(mLeads, avgCheck, productTypes);
-    const profit = smartProfit(mLeads, taxCoefficient, productTypes);
     const totalExp = mExpenses.reduce((s, e) => s + e.amount, 0);
-    const netResult = profit - totalExp;
-    const romi = totalExp > 0 ? Math.round(((revenue - totalExp) / totalExp) * 100) : null;
 
     result.push({
       label: MONTH_SHORT[month],
@@ -160,36 +96,11 @@ export function monthlyStats(
       profitableLeads: profitableCount,
       measurements,
       sales,
-      revenue,
-      profit,
       expenses: totalExp,
-      netResult,
-      romi,
     });
   }
 
   return result;
-}
-
-// ─── Channel pie data ───────────────────────────────────────────
-
-export function channelPieData(
-  leads: Lead[],
-  expenses: Expense[],
-  channels: Channel[],
-  avgCheck: number,
-  productTypes?: ProductType[],
-): ChannelPieItem[] {
-  return channels
-    .map((ch, i) => {
-      const chLeads = leads.filter((l) => l.channelId === ch.id);
-      return {
-        name: ch.name,
-        value: smartRevenue(chLeads, avgCheck, productTypes),
-        color: CHANNEL_COLORS[i % CHANNEL_COLORS.length],
-      };
-    })
-    .filter((item) => item.value > 0);
 }
 
 // ─── Extended monthly stats with channel + product breakdown ────
@@ -199,19 +110,16 @@ export interface MonthStatExtended extends MonthStat {
   channelBreakdown: BreakdownItem[];
   productBreakdown: BreakdownItem[];
   prevMonthChangeLeads: number | null; // % change vs previous month
-  prevMonthChangeRevenue: number | null;
 }
 
 export function monthlyStatsExtended(
   leads: Lead[],
   expenses: Expense[],
   channels: Channel[],
-  avgCheck: number,
   monthCount: number = 12,
-  productTypes?: ProductType[],
-  taxCoefficient: number = 0,
+  productTypes?: { id: number; name: string }[],
 ): MonthStatExtended[] {
-  const stats = monthlyStats(leads, expenses, avgCheck, monthCount, productTypes, taxCoefficient);
+  const stats = monthlyStats(leads, expenses, monthCount);
   const result: MonthStatExtended[] = [];
 
   for (let i = 0; i < stats.length; i++) {
@@ -243,9 +151,6 @@ export function monthlyStatsExtended(
     const prevMonthChangeLeads = prev && prev.leads > 0
       ? Math.round(((s.leads - prev.leads) / prev.leads) * 100)
       : null;
-    const prevMonthChangeRevenue = prev && prev.revenue > 0
-      ? Math.round(((s.revenue - prev.revenue) / prev.revenue) * 100)
-      : null;
 
     result.push({
       ...s,
@@ -253,7 +158,6 @@ export function monthlyStatsExtended(
       channelBreakdown,
       productBreakdown,
       prevMonthChangeLeads,
-      prevMonthChangeRevenue,
     });
   }
 
@@ -272,11 +176,7 @@ export interface QuarterStat {
   profitableLeads: number;
   measurements: number;
   sales: number;
-  revenue: number;
-  profit: number;
   expenses: number;
-  netResult: number;
-  romi: number | null;
 }
 
 export interface YearStat {
@@ -286,11 +186,7 @@ export interface YearStat {
   profitableLeads: number;
   measurements: number;
   sales: number;
-  revenue: number;
-  profit: number;
   expenses: number;
-  netResult: number;
-  romi: number | null;
 }
 
 const QUARTER_LABELS = ["1 квартал", "2 квартал", "3 квартал", "4 квартал"];
@@ -300,22 +196,14 @@ function aggregateStats(months: MonthStatExtended[]): {
   profitableLeads: number;
   measurements: number;
   sales: number;
-  revenue: number;
-  profit: number;
   expenses: number;
-  netResult: number;
-  romi: number | null;
 } {
   const leads = months.reduce((s, m) => s + m.leads, 0);
   const profitableLeads = months.reduce((s, m) => s + m.profitableLeads, 0);
   const measurements = months.reduce((s, m) => s + m.measurements, 0);
   const sales = months.reduce((s, m) => s + m.sales, 0);
-  const revenue = months.reduce((s, m) => s + m.revenue, 0);
-  const profit = months.reduce((s, m) => s + m.profit, 0);
   const expenses = months.reduce((s, m) => s + m.expenses, 0);
-  const netResult = profit - expenses;
-  const romi = expenses > 0 ? Math.round(((revenue - expenses) / expenses) * 100) : null;
-  return { leads, profitableLeads, measurements, sales, revenue, profit, expenses, netResult, romi };
+  return { leads, profitableLeads, measurements, sales, expenses };
 }
 
 /** Group extended monthly stats into Year → Quarter → Month hierarchy.
@@ -378,29 +266,18 @@ export function groupByYearQuarter(monthStats: MonthStatExtended[]): YearStat[] 
 export function currentMonthKpi(
   leads: Lead[],
   expenses: Expense[],
-  avgCheck: number,
-  productTypes?: ProductType[],
-  taxCoefficient: number = 0,
 ) {
   const now = new Date();
   const mLeads = leadsForMonth(leads, now.getFullYear(), now.getMonth());
   const mExpenses = expensesForMonth(expenses, now.getFullYear(), now.getMonth());
   const measurements = mLeads.filter((l) => l.result === "measurement").length;
   const sales = mLeads.filter((l) => l.result === "sale").length;
-  const revenue = smartRevenue(mLeads, avgCheck, productTypes);
-  const profit = smartProfit(mLeads, taxCoefficient, productTypes);
   const totalExp = mExpenses.reduce((s, e) => s + e.amount, 0);
-  const netResult = profit - totalExp;
-  const romi = totalExp > 0 ? Math.round(((revenue - totalExp) / totalExp) * 100) : null;
 
   return {
     leads: mLeads.length,
     measurements,
     sales,
-    revenue,
-    profit,
     expenses: totalExp,
-    netResult,
-    romi,
   };
 }
