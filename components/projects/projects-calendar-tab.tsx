@@ -19,7 +19,7 @@ import { generateInstances } from "@/lib/recurring-utils";
 import { layoutOverlappingItems, type LayoutItem } from "@/lib/calendar-layout";
 
 // ─── Types ───────────────────────────────────────────────────────────
-type CalendarView = "week" | "day";
+type CalendarView = "week" | "day" | "month";
 
 interface ProjectsCalendarTabProps {
   projects: Project[];
@@ -185,6 +185,39 @@ function minutesToTimeString(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+// ─── Month view helpers ──────────────────────────────────────────────
+const MONTH_NAMES_RU = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+];
+
+const PROJECT_PALETTE = [
+  "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#3b82f6",
+  "#8b5cf6", "#ec4899", "#14b8a6", "#f97316", "#64748b",
+];
+
+/** Build 42 dates (6 weeks) for a calendar grid starting from Monday. */
+function getMonthGridDates(year: number, month: number): Date[] {
+  const firstDay = new Date(year, month, 1);
+  const startDow = firstDay.getDay(); // 0=Sun
+  const startOffset = startDow === 0 ? -6 : 1 - startDow;
+  const gridStart = new Date(year, month, 1 + startOffset);
+
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(gridStart);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+}
+
+interface MonthProjectItem {
+  type: "project" | "stage";
+  name: string;
+  projectName: string;
+  color: string;
+  projectId: number;
+}
+
 // ─── Component ───────────────────────────────────────────────────────
 export default function ProjectsCalendarTab({
   projects,
@@ -199,6 +232,9 @@ export default function ProjectsCalendarTab({
   const [view, setView] = useState<CalendarView>("week");
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => new Date());
+  const [monthViewDate, setMonthViewDate] = useState(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+  );
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
@@ -423,6 +459,63 @@ export default function ProjectsCalendarTab({
   });
   const capitalizedDayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
 
+  // ─── Month data ───
+  const monthLabel = `${MONTH_NAMES_RU[monthViewDate.getMonth()]} ${monthViewDate.getFullYear()}`;
+  const monthGridDates = useMemo(
+    () => getMonthGridDates(monthViewDate.getFullYear(), monthViewDate.getMonth()),
+    [monthViewDate]
+  );
+
+  // ─── Project color map (stable per project id) ───
+  const projectColorMap = useMemo(() => {
+    const map = new Map<number, string>();
+    projects.forEach((p, i) => {
+      map.set(p.id, PROJECT_PALETTE[i % PROJECT_PALETTE.length]);
+    });
+    return map;
+  }, [projects]);
+
+  // ─── Month view: project items by date ───
+  const monthProjectsByDate = useMemo(() => {
+    const map = new Map<string, MonthProjectItem[]>();
+    const addItem = (dateKey: string, item: MonthProjectItem) => {
+      const arr = map.get(dateKey) || [];
+      arr.push(item);
+      map.set(dateKey, arr);
+    };
+
+    for (const project of projects) {
+      if (filterProjectId !== null && project.id !== filterProjectId) continue;
+      const color = projectColorMap.get(project.id) || PROJECT_PALETTE[0];
+
+      // Project deadline
+      if (project.deadline) {
+        addItem(project.deadline, {
+          type: "project",
+          name: project.name,
+          projectName: project.name,
+          color,
+          projectId: project.id,
+        });
+      }
+
+      // Stage deadlines
+      for (const stage of project.stages) {
+        if (stage.deadline && stage.deadline !== project.deadline) {
+          addItem(stage.deadline, {
+            type: "stage",
+            name: stage.name,
+            projectName: project.name,
+            color,
+            projectId: project.id,
+          });
+        }
+      }
+    }
+
+    return map;
+  }, [projects, filterProjectId, projectColorMap]);
+
   // ─── Navigation ───
   const goToPrev = () => {
     if (view === "week") {
@@ -431,12 +524,14 @@ export default function ProjectsCalendarTab({
         d.setDate(d.getDate() - 7);
         return d;
       });
-    } else {
+    } else if (view === "day") {
       setSelectedDay((prev) => {
         const d = new Date(prev);
         d.setDate(d.getDate() - 1);
         return d;
       });
+    } else {
+      setMonthViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
     }
   };
 
@@ -447,12 +542,14 @@ export default function ProjectsCalendarTab({
         d.setDate(d.getDate() + 7);
         return d;
       });
-    } else {
+    } else if (view === "day") {
       setSelectedDay((prev) => {
         const d = new Date(prev);
         d.setDate(d.getDate() + 1);
         return d;
       });
+    } else {
+      setMonthViewDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
     }
   };
 
@@ -460,6 +557,7 @@ export default function ProjectsCalendarTab({
     const now = new Date();
     setWeekStart(getWeekStart(now));
     setSelectedDay(now);
+    setMonthViewDate(new Date(now.getFullYear(), now.getMonth(), 1));
   };
 
   // ─── Separate timed vs all-day items for a given date key ───
@@ -474,7 +572,8 @@ export default function ProjectsCalendarTab({
   }
 
   // ─── Visible dates for current view ───
-  const visibleDates: Date[] = view === "week" ? weekDays : [selectedDay];
+  const visibleDates: Date[] =
+    view === "week" ? weekDays : view === "day" ? [selectedDay] : monthGridDates;
 
   // ─────────────────────────────────────────────────────────────────────
   // ─── Drag-and-Drop helpers ─────────────────────────────────────────
@@ -1162,7 +1261,7 @@ export default function ProjectsCalendarTab({
               {"\u2039"}
             </button>
             <h2 className="text-base sm:text-lg font-bold text-gray-900 min-w-[180px] sm:min-w-[280px] text-center">
-              {view === "week" ? weekLabel : capitalizedDayLabel}
+              {view === "week" ? weekLabel : view === "day" ? capitalizedDayLabel : monthLabel}
             </h2>
             <button
               onClick={goToNext}
@@ -1179,6 +1278,16 @@ export default function ProjectsCalendarTab({
               Сегодня
             </button>
             <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setView("month")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  view === "month"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Месяц
+              </button>
               <button
                 onClick={() => setView("week")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
@@ -1202,6 +1311,116 @@ export default function ProjectsCalendarTab({
             </div>
           </div>
         </div>
+
+        {/* ═══ MONTH VIEW ═══ */}
+        {view === "month" && (
+          <div className="overflow-auto">
+            {/* Day-of-week headers */}
+            <div className="grid grid-cols-7 border-b border-gray-100">
+              {DAY_NAMES_SHORT_RU.map((name, i) => (
+                <div
+                  key={i}
+                  className={`px-2 py-2 text-center text-xs font-semibold uppercase tracking-wide ${
+                    i >= 5 ? "text-gray-400" : "text-gray-500"
+                  }`}
+                >
+                  <span className="hidden sm:inline">{DAY_NAMES_FULL_RU[i]}</span>
+                  <span className="sm:hidden">{name}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar grid: 6 rows × 7 cols */}
+            <div className="grid grid-cols-7">
+              {monthGridDates.map((date, idx) => {
+                const key = dateKeyFromDate(date);
+                const isToday = key === todayKey;
+                const isCurrentMonth = date.getMonth() === monthViewDate.getMonth();
+                const isWeekend = idx % 7 >= 5;
+                const projectItems = monthProjectsByDate.get(key) || [];
+
+                return (
+                  <div
+                    key={idx}
+                    className={`border-r border-b border-gray-100 min-h-[100px] sm:min-h-[120px] p-1 sm:p-1.5 transition-colors ${
+                      !isCurrentMonth ? "bg-gray-50/60" : ""
+                    } ${isToday ? "bg-indigo-50/40" : ""} ${isWeekend && isCurrentMonth ? "bg-gray-50/30" : ""}`}
+                  >
+                    {/* Day number */}
+                    <div className="flex items-center justify-between mb-1">
+                      <span
+                        className={`text-sm font-semibold leading-none ${
+                          isToday
+                            ? "bg-indigo-600 text-white w-6 h-6 rounded-full flex items-center justify-center"
+                            : !isCurrentMonth
+                            ? "text-gray-300"
+                            : isWeekend
+                            ? "text-gray-400"
+                            : "text-gray-700"
+                        }`}
+                      >
+                        {date.getDate()}
+                      </span>
+                    </div>
+
+                    {/* Project items */}
+                    <div className="space-y-0.5">
+                      {projectItems.slice(0, 4).map((item, i) => (
+                        <div
+                          key={`${item.projectId}-${item.type}-${i}`}
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] leading-tight truncate cursor-default hover:brightness-95 transition-colors"
+                          style={{
+                            backgroundColor: item.color + "18",
+                            borderLeft: `2px solid ${item.color}`,
+                          }}
+                          title={
+                            item.type === "project"
+                              ? `Проект: ${item.name}`
+                              : `Этап: ${item.name} (${item.projectName})`
+                          }
+                        >
+                          {item.type === "project" ? (
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                          ) : (
+                            <span className="w-1 h-1 rounded-full flex-shrink-0 border" style={{ borderColor: item.color }} />
+                          )}
+                          <span
+                            className={`truncate ${
+                              item.type === "project" ? "font-medium" : "font-normal"
+                            }`}
+                            style={{ color: item.color }}
+                          >
+                            {item.type === "project" ? item.name : item.name}
+                          </span>
+                        </div>
+                      ))}
+                      {projectItems.length > 4 && (
+                        <div className="text-[10px] text-gray-400 px-1.5">
+                          +{projectItems.length - 4} ещё
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Month legend */}
+            <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap items-center gap-3">
+              {projects
+                .filter((p) => filterProjectId === null || p.id === filterProjectId)
+                .map((p) => {
+                  const color = projectColorMap.get(p.id) || PROJECT_PALETTE[0];
+                  return (
+                    <div key={p.id} className="flex items-center gap-1.5 text-xs text-gray-600">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+                      <span>{p.name}</span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
 
         {/* ═══ WEEK VIEW ═══ */}
         {view === "week" && (

@@ -23,7 +23,10 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "Проекты", icon: "📁", href: "/projects",
-    children: [{ label: "Контент", icon: "✏️", href: "/content" }],
+    children: [
+      { label: "Контент", icon: "✏️", href: "/content" },
+      { label: "Планы", icon: "📋", href: "/plans" },
+    ],
   },
   {
     label: "Каналы", icon: "📡", href: "/channels",
