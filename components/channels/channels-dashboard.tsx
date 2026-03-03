@@ -10,6 +10,7 @@ import {
 } from "@/lib/channel-utils";
 import { leadsByDate, leadsForMonth } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import ChannelCardList from "./channel-card-list";
 import ChannelDetailModal from "./channel-detail-modal";
 import ChannelEditModal from "./channel-edit-modal";
@@ -183,7 +184,10 @@ export default function ChannelsDashboard() {
       );
       const groupLeads = monthFilteredLeads.filter((l) => groupChannelIds.includes(l.channelId));
       const leadCount = groupLeads.length;
-      const resultCount = groupLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+      const measurementCount = groupLeads.filter((l) => l.result === "measurement").length;
+      const saleCount = groupLeads.filter((l) => l.result === "sale").length;
+      const resultCount = measurementCount + saleCount;
+      const conversion = leadCount > 0 ? Math.round((resultCount / leadCount) * 100) : 0;
       const costPerLead = leadCount > 0 ? Math.round(groupExpenses / leadCount) : null;
       const costPerResult = resultCount > 0 ? Math.round(groupExpenses / resultCount) : null;
       return {
@@ -191,6 +195,10 @@ export default function ChannelsDashboard() {
         label: g.label,
         channelCount: groupChannels.length,
         leadCount,
+        resultCount,
+        measurementCount,
+        saleCount,
+        conversion,
         expenses: groupExpenses,
         costPerLead,
         costPerResult,
@@ -201,8 +209,26 @@ export default function ChannelsDashboard() {
   const dailyPct = dailyLeadPlan > 0 ? Math.min(100, Math.round((todayLeads.length / dailyLeadPlan) * 100)) : 0;
   const monthlyPct = monthlyLeadPlan > 0 ? Math.min(100, Math.round((monthLeads.length / monthlyLeadPlan) * 100)) : 0;
   const overallCostPerLead = monthFilteredLeads.length > 0 ? Math.round(channelExpensesTotal / monthFilteredLeads.length) : null;
-  const overallResults = monthFilteredLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+  const overallMeasurements = monthFilteredLeads.filter((l) => l.result === "measurement").length;
+  const overallSales = monthFilteredLeads.filter((l) => l.result === "sale").length;
+  const overallResults = overallMeasurements + overallSales;
+  const overallConversion = monthFilteredLeads.length > 0 ? Math.round((overallResults / monthFilteredLeads.length) * 100) : 0;
   const overallCostPerResult = overallResults > 0 ? Math.round(channelExpensesTotal / overallResults) : null;
+
+  // ─── Pie chart data ───
+  const PIE_COLORS = ["#6366f1","#f59e0b","#10b981","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f97316","#64748b"];
+  const channelPieData = useMemo(() => {
+    return channels.map((ch, i) => {
+      const chLeads = monthFilteredLeads.filter((l) => l.channelId === ch.id);
+      return {
+        name: ch.name,
+        leads: chLeads.length,
+        measurements: chLeads.filter((l) => l.result === "measurement").length,
+        expenses: totalExpensesForChannel(monthFilteredExpenses, ch.id),
+        color: PIE_COLORS[i % PIE_COLORS.length],
+      };
+    }).filter((d) => d.leads > 0 || d.expenses > 0);
+  }, [channels, monthFilteredLeads, monthFilteredExpenses]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -346,11 +372,23 @@ export default function ChannelsDashboard() {
             </div>
           </div>
 
-          {/* ═══ Block 3: Стоимость привлечения ═══ */}
+          {/* ═══ Block 3: Статистика ═══ */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5 flex flex-col">
-            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4 font-semibold">Стоимость привлечения</p>
+            <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-4 font-semibold">Статистика</p>
             <div className="flex-1 flex flex-col justify-between">
               <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Результаты</p>
+                  <p className="text-lg font-black text-violet-600">
+                    {overallResults} <span className="text-[10px] font-normal text-gray-400">{overallMeasurements} зам. · {overallSales} прод.</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Конверсия</p>
+                  <p className="text-lg font-black text-emerald-600">
+                    {overallConversion}%
+                  </p>
+                </div>
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
                   <p className="text-lg font-black text-red-500">
@@ -438,6 +476,16 @@ export default function ChannelsDashboard() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Результаты</p>
+                  <p className="text-sm font-bold text-violet-600">
+                    {g.resultCount} <span className="text-[10px] font-normal text-gray-400">{g.measurementCount} зам. · {g.saleCount} прод.</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Конверсия</p>
+                  <p className="text-sm font-bold text-emerald-600">{g.conversion}%</p>
+                </div>
+                <div className="flex items-center justify-between">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
                   <p className="text-sm font-bold text-red-500">
                     {g.expenses.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
@@ -459,6 +507,15 @@ export default function ChannelsDashboard() {
             </div>
           ))}
         </div>
+
+        {/* ─── Pie charts ─── */}
+        {channelPieData.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <PieChartCard title="Лиды по каналам" data={channelPieData} dataKey="leads" />
+            <PieChartCard title="Замеры по каналам" data={channelPieData} dataKey="measurements" />
+            <PieChartCard title="Расходы по каналам" data={channelPieData} dataKey="expenses" suffix=" ₽" formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}к` : String(v)} />
+          </div>
+        )}
 
         {/* Channel cards */}
         <ChannelCardList
@@ -498,6 +555,76 @@ export default function ChannelsDashboard() {
           onDelete={editChannel.channel ? handleChannelDelete : undefined}
           onClose={() => setEditChannel(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── Pie Chart Card ─────────────────────────────────────────────
+
+function PieChartCard({
+  title,
+  data,
+  dataKey,
+  suffix = "",
+  formatValue,
+}: {
+  title: string;
+  data: { name: string; color: string; [key: string]: unknown }[];
+  dataKey: string;
+  suffix?: string;
+  formatValue?: (v: number) => string;
+}) {
+  const hasData = data.some((d) => (d[dataKey] as number) > 0);
+  const fmt = formatValue || ((v: number) => v.toLocaleString("ru-RU"));
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+      <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">{title}</p>
+      {hasData ? (
+        <>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                innerRadius={45}
+                outerRadius={72}
+                dataKey={dataKey}
+                strokeWidth={2}
+                stroke="#fff"
+              >
+                {data.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                formatter={(value: unknown) => [`${fmt(Number(value))}${suffix}`, ""]}
+                contentStyle={{ borderRadius: 12, fontSize: 12 }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          {/* Legend */}
+          <div className="mt-2 space-y-1">
+            {data
+              .filter((d) => (d[dataKey] as number) > 0)
+              .sort((a, b) => (b[dataKey] as number) - (a[dataKey] as number))
+              .map((d) => (
+                <div key={d.name} className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                    <span className="text-[11px] text-gray-600 dark:text-gray-400 truncate">{d.name}</span>
+                  </div>
+                  <span className="text-[11px] font-semibold text-gray-900 dark:text-white flex-shrink-0">
+                    {fmt(d[dataKey] as number)}{suffix}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-gray-300 dark:text-gray-600 text-center py-8">Нет данных</p>
       )}
     </div>
   );

@@ -37,8 +37,11 @@ export default function ChannelDetailModal({
   const chLeads = leadsByChannel(leads, channel.id);
   const chExpenses = totalExpensesForChannel(expenses, channel.id);
   const costPerLead = chLeads.length > 0 ? Math.round(chExpenses / chLeads.length) : null;
-  const chResults = chLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+  const chMeasurements = chLeads.filter((l) => l.result === "measurement").length;
+  const chSales = chLeads.filter((l) => l.result === "sale").length;
+  const chResults = chMeasurements + chSales;
   const costPerResult = chResults > 0 ? Math.round(chExpenses / chResults) : null;
+  const chConversion = chLeads.length > 0 ? Math.round((chResults / chLeads.length) * 100) : 0;
   const groupColor = channelGroupColors[channel.group];
 
   return (
@@ -54,10 +57,19 @@ export default function ChannelDetailModal({
       </div>
 
       {/* Metrics grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
+      <div className="grid grid-cols-3 gap-3 mb-4">
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-500">Лиды</p>
           <p className="text-lg font-bold text-gray-900">{chLeads.length}</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Результаты</p>
+          <p className="text-lg font-bold text-violet-600">{chResults}</p>
+          <p className="text-[10px] text-gray-400">{chMeasurements} зам. · {chSales} прод.</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-500">Конверсия</p>
+          <p className="text-lg font-bold text-emerald-600">{chConversion}%</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-500">Расходы</p>

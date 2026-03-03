@@ -88,8 +88,11 @@ export default function ChannelCardList({
                 const chTasks = standaloneTasks.filter((t) => t.channelId === channel.id);
                 const doneTasks = chTasks.filter((t) => t.status === "done").length;
                 const costPerLead = chLeads.length > 0 ? Math.round(chExpenses / chLeads.length) : null;
-                const chResults = chLeads.filter((l) => l.result === "measurement" || l.result === "sale").length;
+                const chMeasurements = chLeads.filter((l) => l.result === "measurement").length;
+                const chSales = chLeads.filter((l) => l.result === "sale").length;
+                const chResults = chMeasurements + chSales;
                 const costPerResult = chResults > 0 ? Math.round(chExpenses / chResults) : null;
+                const chConversion = chLeads.length > 0 ? Math.round((chResults / chLeads.length) * 100) : 0;
 
                 // Leads today for this channel
                 const chLeadsToday = chLeads.filter((l) => l.date === todayKey).length;
@@ -165,6 +168,15 @@ export default function ChannelCardList({
 
                       {/* Metrics grid */}
                       <div className="grid grid-cols-3 gap-3 py-3 border-t border-gray-100">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Результаты</p>
+                          <p className="text-sm font-bold text-violet-600">{chResults}</p>
+                          <p className="text-[9px] text-gray-400">{chMeasurements} зам. · {chSales} прод.</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Конверсия</p>
+                          <p className="text-sm font-bold text-emerald-600">{chConversion}%</p>
+                        </div>
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-0.5">Расходы</p>
                           <p className="text-sm font-bold text-red-500">
