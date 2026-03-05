@@ -94,6 +94,7 @@ export interface ProjectTask {
   name: string;
   description: string;
   assignee: string;
+  startDate?: string;  // "YYYY-MM-DD"
   deadline: string;
   dueTime?: string;   // "HH:MM" — time-of-day for calendar placement
   duration?: number;   // minutes
@@ -107,6 +108,7 @@ export interface Stage {
   name: string;
   result: string;
   description: string;
+  startDate?: string;  // "YYYY-MM-DD"
   deadline: string;
   projectId: number;
   tasks: ProjectTask[];
@@ -117,10 +119,35 @@ export interface Project {
   name: string;
   goal: string;
   description: string;
+  startDate?: string;
   deadline: string;
   priority: number;
   responsible?: string;
+  planItemId: number | null;
   stages: Stage[];
+}
+
+// ─── Plans (Plan > PlanItem > Project hierarchy) ─────────────────
+
+export interface PlanItem {
+  id: number;
+  name: string;
+  result: string;
+  startDate?: string;
+  deadline: string;
+  responsible: string;
+  color: string;
+  sortOrder: number;
+  planId: number;
+}
+
+export interface Plan {
+  id: number;
+  name: string;
+  startDate?: string;
+  deadline: string;
+  sortOrder: number;
+  items: PlanItem[];
 }
 
 // ─── Expenses ─────────────────────────────────────────────────────

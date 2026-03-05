@@ -23,6 +23,7 @@ export default function ProjectEditModal({
   const [name, setName] = useState(project?.name ?? "");
   const [goal, setGoal] = useState(project?.goal ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
+  const [startDate, setStartDate] = useState(project?.startDate ?? "");
   const [deadline, setDeadline] = useState(project?.deadline ?? "");
   const [responsible, setResponsible] = useState(project?.responsible ?? "");
   const [error, setError] = useState("");
@@ -35,9 +36,11 @@ export default function ProjectEditModal({
       name: name.trim(),
       goal: goal.trim(),
       description: description.trim(),
+      startDate: startDate || undefined,
       deadline,
       priority: project?.priority ?? Date.now(),
       responsible: responsible || undefined,
+      planItemId: project?.planItemId ?? null,
       stages: project?.stages ?? [],
     });
   };
@@ -69,7 +72,11 @@ export default function ProjectEditModal({
           <label className="block text-xs font-medium text-gray-600 mb-1">Описание</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание проекта..." className={`${inputClass} resize-none`} rows={3} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Дата начала</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Дедлайн</label>
             <input type="date" value={deadline} onChange={(e) => { setDeadline(e.target.value); setError(""); }} className={inputClass} />

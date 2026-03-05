@@ -29,6 +29,7 @@ export async function GET() {
       stageId: t.stage_id,
       projectId: t.project_id,
     };
+    if (t.start_date) task.startDate = formatDate(t.start_date);
     if (t.due_time) task.dueTime = t.due_time;
     if (t.duration != null) task.duration = t.duration;
     if (!tasksByStage.has(t.stage_id)) tasksByStage.set(t.stage_id, []);
@@ -37,7 +38,7 @@ export async function GET() {
 
   const stagesByProject = new Map<number, any[]>();
   for (const s of stageRows) {
-    const stage = {
+    const stage: Record<string, unknown> = {
       id: s.id,
       name: s.name,
       result: s.result,
@@ -46,6 +47,7 @@ export async function GET() {
       projectId: s.project_id,
       tasks: tasksByStage.get(s.id) || [],
     };
+    if (s.start_date) stage.startDate = formatDate(s.start_date);
     if (!stagesByProject.has(s.project_id)) stagesByProject.set(s.project_id, []);
     stagesByProject.get(s.project_id)!.push(stage);
   }
@@ -55,9 +57,11 @@ export async function GET() {
     name: p.name,
     goal: p.goal,
     description: p.description,
+    startDate: formatDate(p.start_date),
     deadline: formatDate(p.deadline),
     priority: p.priority,
     responsible: p.responsible,
+    planItemId: p.plan_item_id ?? null,
     stages: stagesByProject.get(p.id) || [],
   }));
 
@@ -80,14 +84,14 @@ export async function POST(request: NextRequest) {
     let projectId: number;
     if (body.id) {
       await conn.execute(
-        "INSERT INTO projects (id, name, goal, description, deadline, priority, responsible) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        [body.id, body.name, body.goal, body.description, body.deadline, body.priority, body.responsible || null]
+        "INSERT INTO projects (id, name, goal, description, start_date, deadline, priority, responsible, plan_item_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [body.id, body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null]
       );
       projectId = body.id;
     } else {
       const [projectResult] = await conn.execute(
-        "INSERT INTO projects (name, goal, description, deadline, priority, responsible) VALUES (?, ?, ?, ?, ?, ?)",
-        [body.name, body.goal, body.description, body.deadline, body.priority, body.responsible || null]
+        "INSERT INTO projects (name, goal, description, start_date, deadline, priority, responsible, plan_item_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null]
       );
       projectId = (projectResult as any).insertId;
     }
@@ -98,14 +102,14 @@ export async function POST(request: NextRequest) {
       let stageId: number;
       if (stage.id) {
         await conn.execute(
-          "INSERT INTO stages (id, name, result, description, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?)",
-          [stage.id, stage.name, stage.result, stage.description, stage.deadline, projectId]
+          "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId]
         );
         stageId = stage.id;
       } else {
         const [stageResult] = await conn.execute(
-          "INSERT INTO stages (name, result, description, deadline, project_id) VALUES (?, ?, ?, ?, ?)",
-          [stage.name, stage.result, stage.description, stage.deadline, projectId]
+          "INSERT INTO stages (name, result, description, start_date, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?)",
+          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId]
         );
         stageId = (stageResult as any).insertId;
       }
@@ -116,14 +120,14 @@ export async function POST(request: NextRequest) {
         let taskId: number;
         if (task.id) {
           await conn.execute(
-            "INSERT INTO project_tasks (id, name, description, assignee, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [task.id, task.name, task.description, task.assignee, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+            "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
           );
           taskId = task.id;
         } else {
           const [taskResult] = await conn.execute(
-            "INSERT INTO project_tasks (name, description, assignee, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [task.name, task.description, task.assignee, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+            "INSERT INTO project_tasks (name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
           );
           taskId = (taskResult as any).insertId;
         }
@@ -138,12 +142,13 @@ export async function POST(request: NextRequest) {
           stageId: stageId,
           projectId: projectId,
         };
+        if (task.startDate) taskObj.startDate = task.startDate;
         if (task.dueTime) taskObj.dueTime = task.dueTime;
         if (task.duration != null) taskObj.duration = task.duration;
         tasks.push(taskObj);
       }
 
-      stages.push({
+      const stageObj: Record<string, unknown> = {
         id: stageId,
         name: stage.name,
         result: stage.result,
@@ -151,7 +156,9 @@ export async function POST(request: NextRequest) {
         deadline: stage.deadline,
         projectId: projectId,
         tasks,
-      });
+      };
+      if (stage.startDate) stageObj.startDate = stage.startDate;
+      stages.push(stageObj);
     }
 
     await conn.commit();
@@ -161,9 +168,11 @@ export async function POST(request: NextRequest) {
       name: body.name,
       goal: body.goal,
       description: body.description,
+      startDate: body.startDate || null,
       deadline: body.deadline,
       priority: body.priority,
       responsible: body.responsible || null,
+      planItemId: body.planItemId ?? null,
       stages,
     };
 

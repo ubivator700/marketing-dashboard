@@ -1,92 +1,204 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { StandaloneTask, StandaloneTaskStatus, Channel } from "@/types/dashboard";
+import type {
+  Project,
+  StandaloneTask,
+  StandaloneTaskStatus,
+  ProjectTaskStatus,
+  RecurringTask,
+  Channel,
+} from "@/types/dashboard";
 import { projectTaskStatusLabels, projectTaskStatusColors } from "@/lib/projects-data";
+import { generateInstances } from "@/lib/recurring-utils";
 import { teamMembers } from "@/lib/data";
 import ModalShell from "@/components/dashboard/modal-shell";
 
+// ─── Unified row shown in the table ────────────────────────────────
+
+interface TodayRow {
+  key: string;
+  name: string;
+  assignee: string;
+  dueTime?: string;
+  status: string;
+  statusLabel: string;
+  statusColor: string;
+  source: "project" | "standalone" | "recurring";
+  projectName?: string;
+  stageName?: string;
+  // for callbacks
+  _projectId?: number;
+  _stageId?: number;
+  _taskId?: number;
+  // original standalone task (for edit modal)
+  _standaloneTask?: StandaloneTask;
+}
+
+// ─── Props ──────────────────────────────────────────────────────────
+
 interface StandaloneTasksTabProps {
   tasks: StandaloneTask[];
+  projects: Project[];
+  recurringTasks: RecurringTask[];
   channels: Channel[];
   onSave: (task: StandaloneTask) => void;
   onDelete: (taskId: number) => void;
+  onUpdateProjectTaskStatus?: (
+    projectId: number,
+    stageId: number,
+    taskId: number,
+    status: ProjectTaskStatus,
+  ) => void;
+  onUpdateStandaloneTaskStatus?: (
+    taskId: number,
+    status: StandaloneTaskStatus,
+  ) => void;
 }
 
-const statusOptions: StandaloneTaskStatus[] = ["todo", "in_progress", "done"];
+// ─── Helpers ────────────────────────────────────────────────────────
 
-type SortField = "status" | "name" | "assignee" | "channel" | "deadline";
-type SortDir = "asc" | "desc";
+const standaloneStatusLabels: Record<StandaloneTaskStatus, string> = {
+  todo: "К выполнению",
+  in_progress: "В работе",
+  done: "Готово",
+};
 
-const statusOrder: Record<StandaloneTaskStatus, number> = { in_progress: 0, todo: 1, done: 2 };
+const standaloneStatusColors: Record<StandaloneTaskStatus, string> = {
+  todo: "bg-gray-100 text-gray-700",
+  in_progress: "bg-blue-100 text-blue-700",
+  done: "bg-green-100 text-green-700",
+};
+
+function todayKey(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+const STATUS_ORDER: Record<string, number> = { in_progress: 0, todo: 1, recurring: 2, done: 3 };
+
+// ─── Component ──────────────────────────────────────────────────────
 
 export default function StandaloneTasksTab({
   tasks,
+  projects,
+  recurringTasks,
   channels,
   onSave,
   onDelete,
+  onUpdateProjectTaskStatus,
+  onUpdateStandaloneTaskStatus,
 }: StandaloneTasksTabProps) {
   const [editingTask, setEditingTask] = useState<StandaloneTask | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [sortField, setSortField] = useState<SortField>("status");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const channelName = (channelId: number | null) => {
-    if (channelId === null) return "—";
-    return channels.find((c) => c.id === channelId)?.name ?? "—";
-  };
+  const today = todayKey();
 
-  const sorted = useMemo(() => {
-    const arr = [...tasks];
-    arr.sort((a, b) => {
-      let cmp = 0;
-      switch (sortField) {
-        case "status":
-          cmp = statusOrder[a.status] - statusOrder[b.status];
-          break;
-        case "name":
-          cmp = a.name.localeCompare(b.name, "ru");
-          break;
-        case "assignee":
-          cmp = a.assignee.localeCompare(b.assignee, "ru");
-          break;
-        case "channel":
-          cmp = channelName(a.channelId).localeCompare(channelName(b.channelId), "ru");
-          break;
-        case "deadline":
-          cmp = a.deadline.localeCompare(b.deadline);
-          break;
+  // Build unified list of tasks for today
+  const rows = useMemo(() => {
+    const result: TodayRow[] = [];
+
+    // 1) Project tasks due today
+    for (const project of projects) {
+      for (const stage of project.stages) {
+        for (const task of stage.tasks) {
+          if (task.deadline !== today) continue;
+          result.push({
+            key: `p-${project.id}-${stage.id}-${task.id}`,
+            name: task.name,
+            assignee: task.assignee,
+            dueTime: task.dueTime,
+            status: task.status,
+            statusLabel: projectTaskStatusLabels[task.status],
+            statusColor: projectTaskStatusColors[task.status],
+            source: "project",
+            projectName: project.name,
+            stageName: stage.name,
+            _projectId: project.id,
+            _stageId: stage.id,
+            _taskId: task.id,
+          });
+        }
       }
-      return sortDir === "asc" ? cmp : -cmp;
+    }
+
+    // 2) Standalone tasks due today
+    for (const task of tasks) {
+      if (task.deadline !== today) continue;
+      result.push({
+        key: `s-${task.id}`,
+        name: task.name,
+        assignee: task.assignee,
+        dueTime: task.dueTime,
+        status: task.status,
+        statusLabel: standaloneStatusLabels[task.status],
+        statusColor: standaloneStatusColors[task.status],
+        source: "standalone",
+        _taskId: task.id,
+        _standaloneTask: task,
+      });
+    }
+
+    // 3) Recurring tasks occurring today
+    for (const rt of recurringTasks) {
+      const instances = generateInstances(rt, today, today);
+      if (instances.length > 0) {
+        result.push({
+          key: `r-${rt.id}`,
+          name: rt.name,
+          assignee: rt.assignee,
+          dueTime: rt.dueTime,
+          status: "recurring",
+          statusLabel: "Регулярная",
+          statusColor: "bg-amber-100 text-amber-700",
+          source: "recurring",
+        });
+      }
+    }
+
+    // Sort: in_progress first, then todo, then recurring, then done
+    result.sort((a, b) => {
+      const oa = STATUS_ORDER[a.status] ?? 9;
+      const ob = STATUS_ORDER[b.status] ?? 9;
+      if (oa !== ob) return oa - ob;
+      // Secondary sort by dueTime (tasks with time first)
+      const ta = a.dueTime || "99:99";
+      const tb = b.dueTime || "99:99";
+      return ta.localeCompare(tb);
     });
-    return arr;
-  }, [tasks, sortField, sortDir, channels]);
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(field);
-      setSortDir(field === "deadline" ? "desc" : "asc");
+    return result;
+  }, [projects, tasks, recurringTasks, today]);
+
+  // Stats
+  const counts = useMemo(() => {
+    const total = rows.length;
+    const done = rows.filter((r) => r.status === "done").length;
+    const active = total - done;
+    const recurring = rows.filter((r) => r.source === "recurring").length;
+    return { total, done, active, recurring };
+  }, [rows]);
+
+  // Toggle status
+  const handleToggle = (row: TodayRow) => {
+    if (row.source === "recurring") return;
+    const newStatus = row.status === "done" ? "todo" : "done";
+    if (row.source === "project" && onUpdateProjectTaskStatus && row._projectId != null && row._stageId != null && row._taskId != null) {
+      onUpdateProjectTaskStatus(row._projectId, row._stageId, row._taskId, newStatus as ProjectTaskStatus);
+    } else if (row.source === "standalone" && row._standaloneTask) {
+      onSave({ ...row._standaloneTask, status: newStatus as StandaloneTaskStatus });
     }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) {
-      return <span className="ml-1 text-gray-300 text-[10px]">⇅</span>;
+  // Edit handler — only for standalone tasks
+  const handleRowClick = (row: TodayRow) => {
+    if (row.source === "standalone" && row._standaloneTask) {
+      setEditingTask(row._standaloneTask);
     }
-    return <span className="ml-1 text-indigo-500 text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>;
   };
-
-  const counts = useMemo(
-    () => ({
-      total: tasks.length,
-      todo: tasks.filter((t) => t.status === "todo").length,
-      in_progress: tasks.filter((t) => t.status === "in_progress").length,
-      done: tasks.filter((t) => t.status === "done").length,
-    }),
-    [tasks],
-  );
 
   const handleModalSave = (task: StandaloneTask) => {
     onSave(task);
@@ -99,13 +211,20 @@ export default function StandaloneTasksTab({
     setEditingTask(null);
   };
 
-  const thClass = "text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide cursor-pointer hover:text-gray-700 select-none transition-colors";
+  const todayLabel = new Date().toLocaleDateString("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 
   return (
     <div>
-      {/* Header with button */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-gray-900">Текущие задачи</h2>
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Задачи на сегодня</h2>
+          <p className="text-sm text-gray-500 mt-0.5 capitalize">{todayLabel}</p>
+        </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
@@ -117,96 +236,125 @@ export default function StandaloneTasksTab({
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Всего задач</p>
+          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Всего на сегодня</p>
           <p className="text-xl font-black text-gray-900">{counts.total}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">К выполнению</p>
-          <p className="text-xl font-black text-gray-500">{counts.todo}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">В работе</p>
-          <p className="text-xl font-black text-blue-600">{counts.in_progress}</p>
+          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Активных</p>
+          <p className="text-xl font-black text-blue-600">{counts.active}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
           <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Готово</p>
           <p className="text-xl font-black text-green-600">{counts.done}</p>
         </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+          <p className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Регулярных</p>
+          <p className="text-xl font-black text-amber-600">{counts.recurring}</p>
+        </div>
       </div>
 
-      {/* Tasks table */}
-      {tasks.length === 0 ? (
+      {/* Tasks list */}
+      {rows.length === 0 ? (
         <div className="text-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-100">
-          <p>Нет задач</p>
+          <p className="text-lg">Нет задач на сегодня</p>
+          <p className="text-sm mt-1">Все задачи выполнены или запланированы на другие дни</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-left border-b border-gray-100">
-                  <th className={`${thClass} w-12`} onClick={() => handleSort("status")}>
-                    <SortIcon field="status" />
-                  </th>
-                  <th className={thClass} onClick={() => handleSort("name")}>
-                    Задача <SortIcon field="name" />
-                  </th>
-                  <th className={thClass} onClick={() => handleSort("assignee")}>
-                    Исполнитель <SortIcon field="assignee" />
-                  </th>
-                  <th className={thClass} onClick={() => handleSort("channel")}>
-                    Канал <SortIcon field="channel" />
-                  </th>
-                  <th className={thClass} onClick={() => handleSort("deadline")}>
-                    Дедлайн <SortIcon field="deadline" />
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sorted.map((task) => (
-                  <tr
-                    key={task.id}
-                    className={`hover:bg-gray-50 transition-colors ${task.status === "done" ? "opacity-60" : ""}`}
+        <div className="space-y-2">
+          {rows.map((row) => {
+            const isDone = row.status === "done";
+            const isRecurring = row.source === "recurring";
+            const isClickable = row.source === "standalone";
+
+            return (
+              <div
+                key={row.key}
+                className={`bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 transition-colors ${
+                  isDone ? "opacity-60" : ""
+                } ${isClickable ? "cursor-pointer hover:border-indigo-200" : ""}`}
+                onClick={() => handleRowClick(row)}
+              >
+                {/* Checkbox */}
+                {!isRecurring ? (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggle(row);
+                    }}
+                    className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                      isDone
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "border-gray-300 hover:border-green-400"
+                    }`}
+                    title={isDone ? "Вернуть в работу" : "Отметить как готово"}
                   >
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSave({ ...task, status: task.status === "done" ? "todo" : "done" });
-                        }}
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
-                          task.status === "done"
-                            ? "bg-green-500 border-green-500 text-white"
-                            : "border-gray-300 hover:border-green-400"
-                        }`}
-                        title={task.status === "done" ? "Вернуть в работу" : "Отметить как готово"}
-                      >
-                        {task.status === "done" && (
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    </td>
-                    <td
-                      className={`px-4 py-3 font-medium text-gray-900 max-w-[250px] cursor-pointer ${task.status === "done" ? "line-through text-gray-400" : ""}`}
-                      onClick={() => setEditingTask(task)}
+                    {isDone && (
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-amber-100 flex-shrink-0 flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  </div>
+                )}
+
+                {/* Task info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-sm font-medium truncate ${
+                        isDone ? "line-through text-gray-400" : "text-gray-900"
+                      }`}
                     >
-                      {task.name}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 cursor-pointer" onClick={() => setEditingTask(task)}>{task.assignee}</td>
-                    <td className="px-4 py-3 text-gray-500 cursor-pointer" onClick={() => setEditingTask(task)}>{channelName(task.channelId)}</td>
-                    <td className="px-4 py-3 text-gray-400 cursor-pointer" onClick={() => setEditingTask(task)}>
-                      {new Date(task.deadline + "T00:00:00").toLocaleDateString("ru-RU", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {row.name}
+                    </span>
+                    {row.dueTime && (
+                      <span className="text-xs text-gray-400 flex-shrink-0">
+                        {row.dueTime}
+                      </span>
+                    )}
+                  </div>
+                  {/* Source info: project + stage */}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {row.source === "project" && row.projectName && (
+                      <>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 truncate max-w-[180px]">
+                          {row.projectName}
+                        </span>
+                        {row.stageName && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 truncate max-w-[140px]">
+                            {row.stageName}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {row.source === "standalone" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-600">
+                        Текущая задача
+                      </span>
+                    )}
+                    {row.source === "recurring" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600">
+                        Регулярная
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assignee */}
+                <span className="text-xs text-gray-500 hidden sm:block flex-shrink-0">
+                  {row.assignee}
+                </span>
+
+                {/* Status badge */}
+                <span className={`text-[10px] px-2 py-0.5 rounded-full flex-shrink-0 ${row.statusColor}`}>
+                  {row.statusLabel}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -247,7 +395,9 @@ interface StandaloneTaskModalProps {
   onClose: () => void;
 }
 
-function StandaloneTaskModal({
+const statusOptions: StandaloneTaskStatus[] = ["todo", "in_progress", "done"];
+
+export function StandaloneTaskModal({
   task,
   channels,
   onSave,
@@ -259,7 +409,7 @@ function StandaloneTaskModal({
   const [description, setDescription] = useState(task?.description ?? "");
   const [assignee, setAssignee] = useState(task?.assignee ?? teamMembers[0]?.name ?? "");
   const [status, setStatus] = useState<StandaloneTaskStatus>(task?.status ?? "todo");
-  const [deadline, setDeadline] = useState(task?.deadline ?? "");
+  const [deadline, setDeadline] = useState(task?.deadline ?? todayKey());
   const [dueTime, setDueTime] = useState(task?.dueTime ?? "");
   const [duration, setDuration] = useState<number | "">(task?.duration ?? "");
   const [channelId, setChannelId] = useState<number | null>(task?.channelId ?? null);

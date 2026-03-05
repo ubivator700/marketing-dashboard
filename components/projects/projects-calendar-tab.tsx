@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type {
   Project,
+  Plan,
   ProjectTask,
   StandaloneTask,
   RecurringTask,
@@ -17,12 +18,15 @@ import {
 } from "@/lib/projects-data";
 import { generateInstances } from "@/lib/recurring-utils";
 import { layoutOverlappingItems, type LayoutItem } from "@/lib/calendar-layout";
+import GanttChart from "./gantt-chart";
+import CalendarQuickAddModal from "./calendar-quick-add-modal";
 
 // ─── Types ───────────────────────────────────────────────────────────
-type CalendarView = "week" | "day" | "month";
+type CalendarView = "week" | "day" | "month" | "gantt";
 
 interface ProjectsCalendarTabProps {
   projects: Project[];
+  plans: Plan[];
   standaloneTasks: StandaloneTask[];
   recurringTasks?: RecurringTask[];
   channels: Channel[];
@@ -37,6 +41,17 @@ interface ProjectsCalendarTabProps {
   onUpdateStandaloneTask?: (
     taskId: number,
     updates: { deadline?: string; dueTime?: string; duration?: number }
+  ) => void;
+  onCreateStandaloneTask?: (task: StandaloneTask) => void;
+  onToggleProjectTaskStatus?: (
+    projectId: number,
+    stageId: number,
+    taskId: number,
+    status: import("@/types/dashboard").ProjectTaskStatus
+  ) => void;
+  onToggleStandaloneTaskStatus?: (
+    taskId: number,
+    status: import("@/types/dashboard").StandaloneTaskStatus
   ) => void;
 }
 
@@ -221,6 +236,7 @@ interface MonthProjectItem {
 // ─── Component ───────────────────────────────────────────────────────
 export default function ProjectsCalendarTab({
   projects,
+  plans,
   standaloneTasks,
   recurringTasks = [],
   channels,
@@ -228,6 +244,9 @@ export default function ProjectsCalendarTab({
   currentUser,
   onUpdateProjectTask,
   onUpdateStandaloneTask,
+  onCreateStandaloneTask,
+  onToggleProjectTaskStatus,
+  onToggleStandaloneTaskStatus,
 }: ProjectsCalendarTabProps) {
   const [view, setView] = useState<CalendarView>("week");
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
@@ -237,6 +256,12 @@ export default function ProjectsCalendarTab({
   );
   const [selectedItem, setSelectedItem] = useState<CalendarItem | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+
+  // Quick-add task from calendar click
+  const [quickAddState, setQuickAddState] = useState<{
+    date: string; // "YYYY-MM-DD"
+    time?: string; // "HH:MM"
+  } | null>(null);
 
   // Drag-and-drop state
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -865,6 +890,27 @@ export default function ProjectsCalendarTab({
     };
   }, [dragState, resizeState]);
 
+  // ─── Toggle task status (done ↔ todo) ───
+  function handleToggleStatus(item: CalendarItem) {
+    if (item.source === "recurring") return; // recurring tasks have no toggle
+    const newStatus = item.status === "done" ? "todo" : "done";
+    if (item.source === "project" && onToggleProjectTaskStatus && item._projectId != null && item._stageId != null && item._taskId != null) {
+      onToggleProjectTaskStatus(item._projectId, item._stageId, item._taskId, newStatus as import("@/types/dashboard").ProjectTaskStatus);
+    } else if (item.source === "standalone" && onToggleStandaloneTaskStatus && item._taskId != null) {
+      onToggleStandaloneTaskStatus(item._taskId, newStatus as import("@/types/dashboard").StandaloneTaskStatus);
+    }
+  }
+
+  // ─── Click on empty grid cell → open quick-add ───
+  function handleCellClick(dateKey: string, hour?: number) {
+    if (dragState || resizeState) return;
+    if (!onCreateStandaloneTask) return;
+    setQuickAddState({
+      date: dateKey,
+      time: hour != null ? `${String(hour).padStart(2, "0")}:00` : undefined,
+    });
+  }
+
   // ─── Render: Task detail popup ───
   const taskDetailPopup = selectedItem && (
     <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center">
@@ -923,6 +969,23 @@ export default function ProjectsCalendarTab({
           {selectedItem.projectName && <p>Проект: {selectedItem.projectName}</p>}
           {selectedItem.channelName && <p>Канал: {selectedItem.channelName}</p>}
         </div>
+
+        {/* Toggle status button (not for recurring) */}
+        {selectedItem.source !== "recurring" && (onToggleProjectTaskStatus || onToggleStandaloneTaskStatus) && (
+          <button
+            onClick={() => {
+              handleToggleStatus(selectedItem);
+              setSelectedItem(null);
+            }}
+            className={`mt-4 w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+              selectedItem.status === "done"
+                ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
+            }`}
+          >
+            {selectedItem.status === "done" ? "Вернуть в работу" : "✓ Отметить выполненной"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -935,21 +998,48 @@ export default function ProjectsCalendarTab({
       <div className="space-y-0.5">
         {items.map((item) => {
           const isDraggingThis = dragState?.item.id === item.id;
+          const isDone = item.status === "done";
           return (
-            <button
+            <div
               key={item.id}
-              onPointerDown={(e) => handleAllDayDragStart(e, item, dateKey)}
               className={`w-full text-left flex items-center gap-1 px-1.5 py-1 rounded text-xs hover:bg-gray-100 transition-colors touch-none select-none ${
                 isDraggingThis && dragState?.hasMoved ? "opacity-40" : ""
-              }`}
-              style={{ borderLeft: `3px solid ${item.color}`, cursor: dragState ? "grabbing" : "grab" }}
+              } ${isDone ? "opacity-60" : ""}`}
+              style={{
+                borderLeft: `3px solid ${isDone ? "#22c55e" : item.color}`,
+                cursor: dragState ? "grabbing" : "grab",
+              }}
+              onPointerDown={(e) => handleAllDayDragStart(e, item, dateKey)}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{ backgroundColor: item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR }}
-              />
-              <span className="truncate text-gray-700">{item.name}</span>
-            </button>
+              {/* Status checkbox (not for recurring) */}
+              {item.source !== "recurring" && (onToggleProjectTaskStatus || onToggleStandaloneTaskStatus) ? (
+                <button
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleStatus(item);
+                  }}
+                  className={`w-3 h-3 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors ${
+                    isDone
+                      ? "bg-green-500 border-green-500 text-white"
+                      : "border-gray-400 hover:border-indigo-400 hover:bg-indigo-50"
+                  }`}
+                  title={isDone ? "Отменить выполнение" : "Отметить выполненной"}
+                >
+                  {isDone && (
+                    <svg className="w-1.5 h-1.5" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              ) : (
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR }}
+                />
+              )}
+              <span className={`truncate ${isDone ? "line-through text-gray-400" : "text-gray-700"}`}>{item.name}</span>
+            </div>
           );
         })}
       </div>
@@ -1130,8 +1220,8 @@ export default function ProjectsCalendarTab({
             height: clampedHeight,
             left: leftPct,
             width: widthPct,
-            backgroundColor: item.color + "20",
-            borderLeft: `3px solid ${item.color}`,
+            backgroundColor: item.status === "done" ? "#d1fae520" : item.color + "20",
+            borderLeft: `3px solid ${item.status === "done" ? "#22c55e" : item.color}`,
             cursor: resizeState ? "ns-resize" : dragState ? "grabbing" : "grab",
             zIndex: isInteracting ? 25 : undefined,
           }}
@@ -1146,15 +1236,36 @@ export default function ProjectsCalendarTab({
           </div>
 
           {/* Content area */}
-          <div className="px-2 py-1">
+          <div className={`px-2 py-1 ${item.status === "done" ? "opacity-60" : ""}`}>
             <div className="flex items-center gap-1">
-              <span
-                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{
-                  backgroundColor:
-                    item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR,
-                }}
-              />
+              {/* Status checkbox (not for recurring) */}
+              {item.source !== "recurring" && (onToggleProjectTaskStatus || onToggleStandaloneTaskStatus) && (
+                <button
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleStatus(item);
+                  }}
+                  className={`w-3.5 h-3.5 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors ${
+                    item.status === "done"
+                      ? "bg-green-500 border-green-500 text-white"
+                      : "border-gray-400 hover:border-indigo-400 hover:bg-indigo-50"
+                  }`}
+                  title={item.status === "done" ? "Отменить выполнение" : "Отметить выполненной"}
+                >
+                  {item.status === "done" && (
+                    <svg className="w-2 h-2" viewBox="0 0 12 12" fill="none">
+                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              )}
+              {item.source === "recurring" && (
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: RECURRING_TASK_COLOR }}
+                />
+              )}
               <span
                 className="text-xs font-medium truncate"
                 style={{ color: item.color }}
@@ -1164,7 +1275,7 @@ export default function ProjectsCalendarTab({
                   : item.dueTime}
               </span>
             </div>
-            <p className="text-xs text-gray-800 mt-0.5 leading-tight line-clamp-2">
+            <p className={`text-xs text-gray-800 mt-0.5 leading-tight line-clamp-2 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>
               {item.name}
             </p>
             {clampedHeight > 50 && (
@@ -1308,9 +1419,30 @@ export default function ProjectsCalendarTab({
               >
                 День
               </button>
+              <button
+                onClick={() => setView("gantt")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  view === "gantt"
+                    ? "bg-white text-gray-900 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Гант
+              </button>
             </div>
           </div>
         </div>
+
+        {/* ═══ GANTT VIEW ═══ */}
+        {view === "gantt" && (
+          <GanttChart
+            projects={projects}
+            plans={plans}
+            standaloneTasks={standaloneTasks}
+            onToggleProjectTaskStatus={onToggleProjectTaskStatus}
+            onToggleStandaloneTaskStatus={onToggleStandaloneTaskStatus}
+          />
+        )}
 
         {/* ═══ MONTH VIEW ═══ */}
         {view === "month" && (
@@ -1346,8 +1478,8 @@ export default function ProjectsCalendarTab({
                       !isCurrentMonth ? "bg-gray-50/60" : ""
                     } ${isToday ? "bg-indigo-50/40" : ""} ${isWeekend && isCurrentMonth ? "bg-gray-50/30" : ""}`}
                   >
-                    {/* Day number */}
-                    <div className="flex items-center justify-between mb-1">
+                    {/* Day number + add button */}
+                    <div className="flex items-center justify-between mb-1 group/daycell">
                       <span
                         className={`text-sm font-semibold leading-none ${
                           isToday
@@ -1361,6 +1493,18 @@ export default function ProjectsCalendarTab({
                       >
                         {date.getDate()}
                       </span>
+                      {onCreateStandaloneTask && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCellClick(key);
+                          }}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-gray-400 hover:bg-indigo-100 hover:text-indigo-600 opacity-0 group-hover/daycell:opacity-100 transition-all text-sm leading-none"
+                          title="Добавить задачу"
+                        >
+                          +
+                        </button>
+                      )}
                     </div>
 
                     {/* Project items */}
@@ -1538,7 +1682,7 @@ export default function ProjectsCalendarTab({
                 </div>
               ))}
 
-              {/* Day column cells (background grid) */}
+              {/* Day column cells (background grid) — click to add task */}
               {weekDays.map((date, colIdx) => {
                 const key = formatDateKey(
                   date.getFullYear(),
@@ -1546,13 +1690,14 @@ export default function ProjectsCalendarTab({
                   date.getDate()
                 );
                 const isToday = key === todayKey;
-                return HOURS.map((_, rowIdx) => (
+                return HOURS.map((hour, rowIdx) => (
                   <div
                     key={`cell-${colIdx}-${rowIdx}`}
-                    className={`border-r border-b border-gray-100 ${
+                    className={`border-r border-b border-gray-100 cursor-pointer hover:bg-indigo-50/40 transition-colors ${
                       isToday ? "bg-indigo-50/20" : ""
                     }`}
                     style={{ gridRow: rowIdx + 1, gridColumn: colIdx + 2 }}
+                    onClick={() => handleCellClick(key, hour)}
                   />
                 ));
               })}
@@ -1675,8 +1820,8 @@ export default function ProjectsCalendarTab({
                 </div>
               ))}
 
-              {/* Background cells */}
-              {HOURS.map((_, rowIdx) => {
+              {/* Background cells — click to add task */}
+              {HOURS.map((hour, rowIdx) => {
                 const dayKey = formatDateKey(
                   selectedDay.getFullYear(),
                   selectedDay.getMonth(),
@@ -1686,10 +1831,11 @@ export default function ProjectsCalendarTab({
                 return (
                   <div
                     key={`cell-${rowIdx}`}
-                    className={`border-b border-gray-100 ${
+                    className={`border-b border-gray-100 cursor-pointer hover:bg-indigo-50/40 transition-colors ${
                       isToday ? "bg-indigo-50/20" : ""
                     }`}
                     style={{ gridRow: rowIdx + 1, gridColumn: 2 }}
+                    onClick={() => handleCellClick(dayKey, hour)}
                   />
                 );
               })}
@@ -1741,6 +1887,18 @@ export default function ProjectsCalendarTab({
 
       {/* Task detail popup */}
       {taskDetailPopup}
+
+      {/* Quick-add modal */}
+      {quickAddState && onCreateStandaloneTask && (
+        <CalendarQuickAddModal
+          defaultDate={quickAddState.date}
+          defaultTime={quickAddState.time}
+          channels={channels}
+          currentUser={currentUser}
+          onSave={onCreateStandaloneTask}
+          onClose={() => setQuickAddState(null)}
+        />
+      )}
     </div>
   );
 }

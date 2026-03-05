@@ -22,7 +22,6 @@ export default function ChannelsDashboard() {
     channels, setChannels,
     leads,
     expenses, setExpenses,
-    averageCheck, setAverageCheck,
     monthlyLeadPlan, setMonthlyLeadPlan,
     dailyLeadPlan,
     standaloneTasks, setStandaloneTasks,
@@ -39,8 +38,6 @@ export default function ChannelsDashboard() {
   const [editChannel, setEditChannel] = useState<{ channel: Channel | null } | null>(null);
 
   // Inline edits
-  const [editingCheck, setEditingCheck] = useState(false);
-  const [checkInput, setCheckInput] = useState(String(averageCheck));
   const [editingMonthly, setEditingMonthly] = useState(false);
   const [monthlyInput, setMonthlyInput] = useState(String(monthlyLeadPlan));
 
@@ -151,11 +148,6 @@ export default function ChannelsDashboard() {
   );
 
   // Inline save helpers
-  const saveCheck = () => {
-    const val = Number(checkInput);
-    if (val > 0) setAverageCheck(val);
-    setEditingCheck(false);
-  };
   const saveMonthly = () => {
     const val = Number(monthlyInput);
     if (val > 0) setMonthlyLeadPlan(val);
@@ -410,33 +402,6 @@ export default function ChannelsDashboard() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Средний чек — compact editable */}
-        <div className="flex items-center gap-3 mb-5">
-          <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Средний чек:</span>
-          {editingCheck ? (
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                value={checkInput}
-                onChange={(e) => setCheckInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && saveCheck()}
-                onBlur={saveCheck}
-                className="w-20 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-bold dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                autoFocus
-              />
-              <span className="text-xs text-gray-400">₽</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setCheckInput(String(averageCheck)); setEditingCheck(true); }}
-              className="text-sm font-bold text-gray-900 dark:text-white dark:text-white hover:text-indigo-600 transition-colors"
-              title="Нажмите для редактирования"
-            >
-              {averageCheck.toLocaleString("ru-RU")} ₽
-            </button>
-          )}
         </div>
 
         {/* Group filter */}

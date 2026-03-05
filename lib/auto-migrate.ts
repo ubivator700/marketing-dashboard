@@ -201,6 +201,41 @@ export async function runAutoMigrate() {
     }
 
     // ───────────────────────────────────────────────────────────
+    //  PLANS (Plan > PlanItem > Project hierarchy)
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "plans"))) {
+      console.log("  [migrate] CREATE TABLE plans");
+      await conn.query(`
+        CREATE TABLE plans (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          name        VARCHAR(200) NOT NULL,
+          deadline    DATE         NOT NULL,
+          sort_order  INT          NOT NULL DEFAULT 0
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  PLAN_ITEMS
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "plan_items"))) {
+      console.log("  [migrate] CREATE TABLE plan_items");
+      await conn.query(`
+        CREATE TABLE plan_items (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          name        VARCHAR(200) NOT NULL,
+          result      TEXT         NOT NULL,
+          deadline    DATE         NOT NULL,
+          responsible VARCHAR(100) NOT NULL DEFAULT '',
+          color       VARCHAR(20)  NOT NULL DEFAULT 'blue',
+          sort_order  INT          NOT NULL DEFAULT 0,
+          plan_id     BIGINT       NOT NULL,
+          FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
     //  PROJECTS
     // ───────────────────────────────────────────────────────────
     if (!(await tableExists(conn, "projects"))) {
@@ -218,6 +253,11 @@ export async function runAutoMigrate() {
       `);
     }
     await ensureColumn(conn, "projects", "responsible", "VARCHAR(100) NULL");
+    await ensureColumn(conn, "projects", "plan_item_id", "BIGINT NULL");
+    await ensureFK(conn, "projects", "fk_projects_plan_item", "plan_item_id", "plan_items", "id", "SET NULL");
+    await ensureColumn(conn, "plans", "start_date", "DATE NULL");
+    await ensureColumn(conn, "plan_items", "start_date", "DATE NULL");
+    await ensureColumn(conn, "projects", "start_date", "DATE NULL");
 
     // ───────────────────────────────────────────────────────────
     //  STAGES
@@ -259,6 +299,8 @@ export async function runAutoMigrate() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `);
     }
+    await ensureColumn(conn, "stages", "start_date", "DATE NULL");
+    await ensureColumn(conn, "project_tasks", "start_date", "DATE NULL");
     await ensureColumn(conn, "project_tasks", "due_time", "VARCHAR(5) NULL");
     await ensureColumn(conn, "project_tasks", "duration", "INT NULL");
 

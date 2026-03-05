@@ -18,6 +18,18 @@ interface ProjectTaskEditModalProps {
 
 const statusOptions: ProjectTaskStatus[] = ["todo", "in_progress", "done"];
 
+function durationLabel(startDate?: string, deadline?: string): string | null {
+  if (!startDate || !deadline) return null;
+  const s = new Date(startDate + "T00:00:00");
+  const e = new Date(deadline + "T00:00:00");
+  const days = Math.round((e.getTime() - s.getTime()) / 86400000);
+  if (days < 0) return null;
+  const d = days + 1;
+  if (d === 1) return "1 день";
+  if (d >= 2 && d <= 4) return `${d} дня`;
+  return `${d} дней`;
+}
+
 export default function ProjectTaskEditModal({
   task,
   projectId,
@@ -31,6 +43,7 @@ export default function ProjectTaskEditModal({
   const [name, setName] = useState(task?.name ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [assignee, setAssignee] = useState(task?.assignee ?? teamMembers[0]?.name ?? "");
+  const [startDate, setStartDate] = useState(task?.startDate ?? "");
   const [deadline, setDeadline] = useState(task?.deadline ?? "");
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? "todo");
   const [error, setError] = useState("");
@@ -43,7 +56,10 @@ export default function ProjectTaskEditModal({
       name: name.trim(),
       description: description.trim(),
       assignee,
+      startDate: startDate || undefined,
       deadline,
+      dueTime: task?.dueTime,
+      duration: task?.duration,
       status,
       stageId,
       projectId,
@@ -60,6 +76,8 @@ export default function ProjectTaskEditModal({
     "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const selectClass =
     "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500";
+
+  const dur = durationLabel(startDate, deadline);
 
   return (
     <ModalShell onClose={onClose} title={isCreate ? "Новая задача" : "Редактировать задачу"}>
@@ -93,10 +111,19 @@ export default function ProjectTaskEditModal({
             </select>
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Дедлайн</label>
-          <input type="date" value={deadline} onChange={(e) => { setDeadline(e.target.value); setError(""); }} className={inputClass} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Дата начала</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Дедлайн</label>
+            <input type="date" value={deadline} onChange={(e) => { setDeadline(e.target.value); setError(""); }} className={inputClass} />
+          </div>
         </div>
+        {dur && (
+          <p className="text-xs text-gray-400">Длительность: {dur}</p>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mt-6">

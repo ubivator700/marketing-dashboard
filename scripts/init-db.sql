@@ -31,6 +31,8 @@ DROP TABLE IF EXISTS channels;
 DROP TABLE IF EXISTS project_tasks;
 DROP TABLE IF EXISTS stages;
 DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS plan_items;
+DROP TABLE IF EXISTS plans;
 DROP TABLE IF EXISTS employee_schedule;
 DROP TABLE IF EXISTS employees;
 DROP TABLE IF EXISTS tasks;
@@ -103,17 +105,46 @@ CREATE TABLE employee_schedule (
 ) ENGINE=InnoDB;
 
 -- ═══════════════════════════════════════════════════════
+-- Plans (Plan > PlanItem > Project hierarchy)
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE plans (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(200) NOT NULL,
+  deadline    DATE         NOT NULL,
+  sort_order  INT          NOT NULL DEFAULT 0
+) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════════════════════════
+-- Plan Items
+-- ═══════════════════════════════════════════════════════
+
+CREATE TABLE plan_items (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name        VARCHAR(200) NOT NULL,
+  result      TEXT         NOT NULL,
+  deadline    DATE         NOT NULL,
+  responsible VARCHAR(100) NOT NULL DEFAULT '',
+  color       VARCHAR(20)  NOT NULL DEFAULT 'blue',
+  sort_order  INT          NOT NULL DEFAULT 0,
+  plan_id     BIGINT       NOT NULL,
+  FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ═══════════════════════════════════════════════════════
 -- Projects
 -- ═══════════════════════════════════════════════════════
 
 CREATE TABLE projects (
-  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-  name        VARCHAR(200) NOT NULL,
-  goal        TEXT         NOT NULL,
-  description TEXT         NOT NULL,
-  deadline    DATE         NOT NULL,
-  priority    BIGINT       NOT NULL DEFAULT 0,
-  responsible VARCHAR(100) NULL
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name         VARCHAR(200) NOT NULL,
+  goal         TEXT         NOT NULL,
+  description  TEXT         NOT NULL,
+  deadline     DATE         NOT NULL,
+  priority     BIGINT       NOT NULL DEFAULT 0,
+  responsible  VARCHAR(100) NULL,
+  plan_item_id BIGINT       NULL,
+  FOREIGN KEY (plan_item_id) REFERENCES plan_items(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- ═══════════════════════════════════════════════════════
@@ -125,6 +156,7 @@ CREATE TABLE stages (
   name        VARCHAR(200) NOT NULL,
   result      TEXT         NOT NULL,
   description TEXT         NOT NULL,
+  start_date  DATE         NULL,
   deadline    DATE         NOT NULL,
   project_id  BIGINT       NOT NULL,
   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -139,6 +171,7 @@ CREATE TABLE project_tasks (
   name        VARCHAR(500) NOT NULL,
   description TEXT         NOT NULL,
   assignee    VARCHAR(100) NOT NULL DEFAULT '',
+  start_date  DATE         NULL,
   deadline    DATE         NOT NULL,
   due_time    VARCHAR(5)   NULL,
   duration    INT          NULL,

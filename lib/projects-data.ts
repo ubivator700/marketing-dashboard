@@ -9,6 +9,7 @@ export const initialProjects: Project[] = [
     deadline: "2026-06-30",
     priority: 1,
     responsible: "Диана",
+    planItemId: null,
     stages: [
       {
         id: 1,
@@ -56,6 +57,7 @@ export const initialProjects: Project[] = [
     deadline: "2026-04-30",
     priority: 2,
     responsible: "Дима",
+    planItemId: null,
     stages: [
       {
         id: 4,
@@ -90,6 +92,7 @@ export const initialProjects: Project[] = [
     deadline: "2026-05-31",
     priority: 3,
     responsible: "Никита",
+    planItemId: null,
     stages: [
       {
         id: 6,

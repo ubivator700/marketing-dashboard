@@ -1,0 +1,150 @@
+"use client";
+
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import type { Plan, PlanItem, Project } from "@/types/dashboard";
+import PlanItemBlock from "./plan-item-block";
+
+interface PlanBlockProps {
+  plan: Plan;
+  projectsByItem: Map<number, Project[]>;
+  onEdit: () => void;
+  onDelete: () => void;
+  onAddItem: () => void;
+  onEditItem: (item: PlanItem) => void;
+  onDeleteItem: (itemId: number) => void;
+  onAddProjectToItem: (itemId: number) => void;
+  onEditProject: (project: Project) => void;
+  onDeleteProject: (projectId: number) => void;
+}
+
+export default function PlanBlock({
+  plan,
+  projectsByItem,
+  onEdit,
+  onDelete,
+  onAddItem,
+  onEditItem,
+  onDeleteItem,
+  onAddProjectToItem,
+  onEditProject,
+  onDeleteProject,
+}: PlanBlockProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `plan-${plan.id}` });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const startLabel = plan.startDate
+    ? new Date(plan.startDate + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
+    : null;
+  const deadlineLabel = new Date(plan.deadline + "T00:00:00").toLocaleDateString("ru-RU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const sortedItems = [...plan.items].sort((a, b) => a.sortOrder - b.sortOrder);
+  const itemIds = sortedItems.map((i) => `planitem-${i.id}`);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+    >
+      {/* Plan header */}
+      <div className="px-5 py-4 flex items-start gap-3 group border-b border-gray-100 bg-gradient-to-r from-indigo-50/50 to-white">
+        {/* Drag handle */}
+        <button
+          {...attributes}
+          {...listeners}
+          className="mt-1 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none"
+          title="Перетащить план"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="5" cy="3" r="1.5" />
+            <circle cx="11" cy="3" r="1.5" />
+            <circle cx="5" cy="8" r="1.5" />
+            <circle cx="11" cy="8" r="1.5" />
+            <circle cx="5" cy="13" r="1.5" />
+            <circle cx="11" cy="13" r="1.5" />
+          </svg>
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-gray-900 leading-tight flex items-center gap-2">
+                <span className="text-indigo-500">📋</span>
+                {plan.name}
+              </h3>
+              <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                <span>{startLabel ? `${startLabel} — ${deadlineLabel}` : `Дедлайн: ${deadlineLabel}`}</span>
+                <span>·</span>
+                <span>{plan.items.length} пункт{plan.items.length === 1 ? "" : plan.items.length < 5 ? "а" : "ов"}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={onEdit}
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-600 p-1"
+                title="Редактировать план"
+              >
+                ✏️
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Удалить план и все его пункты?")) onDelete();
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1"
+                title="Удалить план"
+              >
+                🗑️
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Plan items */}
+      <div className="px-5 py-4">
+        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+          <div className="space-y-3">
+            {sortedItems.map((item) => (
+              <PlanItemBlock
+                key={item.id}
+                item={item}
+                projects={projectsByItem.get(item.id) || []}
+                onEdit={() => onEditItem(item)}
+                onDelete={() => onDeleteItem(item.id)}
+                onAddProject={() => onAddProjectToItem(item.id)}
+                onEditProject={onEditProject}
+                onDeleteProject={onDeleteProject}
+              />
+            ))}
+          </div>
+        </SortableContext>
+
+        {/* Add item button */}
+        <button
+          onClick={onAddItem}
+          className="w-full mt-3 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500 transition-colors"
+        >
+          + Добавить пункт
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -10,7 +10,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import type { Project, Expense, Channel, Lead, Department, Employee, StandaloneTask, RecurringTask, Store, ProductType } from "@/types/dashboard";
+import type { Project, Expense, Channel, Lead, Department, Employee, StandaloneTask, RecurringTask, Store, ProductType, Plan } from "@/types/dashboard";
 import { useAuth } from "@/lib/auth-context";
 
 // ─── Context interface (unchanged — all components stay compatible) ──
@@ -49,6 +49,8 @@ interface AppContextValue {
   setSelectedProductTypeId: React.Dispatch<React.SetStateAction<number | null>>;
   taxCoefficient: number;
   setTaxCoefficient: React.Dispatch<React.SetStateAction<number>>;
+  plans: Plan[];
+  setPlans: React.Dispatch<React.SetStateAction<Plan[]>>;
   filteredLeads: Lead[];
   filteredExpenses: Expense[];
 }
@@ -245,6 +247,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [productTypes, setProductTypes] = useState<ProductType[]>([]);
   const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Refs for previous values (used to compute diffs in sync effects)
@@ -262,6 +265,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const prevRecurringTasks = useRef<RecurringTask[]>([]);
   const prevStores = useRef<Store[]>([]);
   const prevProductTypes = useRef<ProductType[]>([]);
+  const prevPlans = useRef<Plan[]>([]);
 
   // ─── Load from API on mount (after auth resolves) ─────────────
 
@@ -282,7 +286,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      const [proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes] = await Promise.all([
+      const [proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes, plns] = await Promise.all([
         loadJSON<Project[]>("/api/projects", []),
         loadJSON<Expense[]>("/api/expenses", []),
         loadJSON<Channel[]>("/api/channels", []),
@@ -294,6 +298,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loadJSON<RecurringTask[]>("/api/recurring-tasks", []),
         loadJSON<Store[]>("/api/stores", []),
         loadJSON<ProductType[]>("/api/product-types", []),
+        loadJSON<Plan[]>("/api/plans", []),
       ]);
 
       if (cancelled) return;
@@ -312,6 +317,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setRecurringTasks(rtasks);
       setStores(strs);
       setProductTypes(ptypes);
+      setPlans(plns);
 
       prevProjects.current = proj;
       prevExpenses.current = exp;
@@ -327,6 +333,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       prevRecurringTasks.current = rtasks;
       prevStores.current = strs;
       prevProductTypes.current = ptypes;
+      prevPlans.current = plns;
 
       setDataLoaded(true);
     })();
@@ -436,6 +443,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (prev !== productTypes) syncArray("/api/product-types", prev, productTypes);
   }, [productTypes, dataLoaded]);
 
+  useEffect(() => {
+    if (!dataLoaded) return;
+    const prev = prevPlans.current;
+    prevPlans.current = plans;
+    if (prev !== plans) syncArray("/api/plans", prev, plans);
+  }, [plans, dataLoaded]);
+
   // ─── Filtered leads/expenses by selectedStoreId + selectedProductTypeId ──
   const filteredLeads = useMemo(() => {
     let result = leads;
@@ -495,6 +509,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         productTypes, setProductTypes,
         selectedProductTypeId, setSelectedProductTypeId,
         taxCoefficient, setTaxCoefficient,
+        plans, setPlans,
         filteredLeads,
         filteredExpenses,
       }}

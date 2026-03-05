@@ -13,6 +13,19 @@ interface StageEditModalProps {
   onClose: () => void;
 }
 
+function durationLabel(startDate?: string, deadline?: string): string | null {
+  if (!startDate || !deadline) return null;
+  const s = new Date(startDate + "T00:00:00");
+  const e = new Date(deadline + "T00:00:00");
+  const days = Math.round((e.getTime() - s.getTime()) / 86400000);
+  if (days < 0) return null;
+  if (days === 0) return "1 день";
+  const d = days + 1;
+  if (d === 1) return "1 день";
+  if (d >= 2 && d <= 4) return `${d} дня`;
+  return `${d} дней`;
+}
+
 export default function StageEditModal({
   stage,
   projectId,
@@ -25,6 +38,7 @@ export default function StageEditModal({
   const [name, setName] = useState(stage?.name ?? "");
   const [result, setResult] = useState(stage?.result ?? "");
   const [description, setDescription] = useState(stage?.description ?? "");
+  const [startDate, setStartDate] = useState(stage?.startDate ?? "");
   const [deadline, setDeadline] = useState(stage?.deadline ?? "");
   const [error, setError] = useState("");
 
@@ -36,6 +50,7 @@ export default function StageEditModal({
       name: name.trim(),
       result: result.trim(),
       description: description.trim(),
+      startDate: startDate || undefined,
       deadline,
       projectId,
       tasks: stage?.tasks ?? [],
@@ -50,6 +65,8 @@ export default function StageEditModal({
 
   const inputClass =
     "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+
+  const dur = durationLabel(startDate, deadline);
 
   return (
     <ModalShell onClose={onClose} title={isCreate ? "Новый этап" : "Редактировать этап"}>
@@ -69,10 +86,19 @@ export default function StageEditModal({
           <label className="block text-xs font-medium text-gray-600 mb-1">Описание</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Описание этапа..." className={`${inputClass} resize-none`} rows={2} />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Дедлайн</label>
-          <input type="date" value={deadline} onChange={(e) => { setDeadline(e.target.value); setError(""); }} className={inputClass} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Дата начала</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Дедлайн</label>
+            <input type="date" value={deadline} onChange={(e) => { setDeadline(e.target.value); setError(""); }} className={inputClass} />
+          </div>
         </div>
+        {dur && (
+          <p className="text-xs text-gray-400">Длительность: {dur}</p>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mt-6">

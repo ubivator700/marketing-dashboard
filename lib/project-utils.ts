@@ -1,4 +1,4 @@
-import type { Project, Stage, ProjectTask } from "@/types/dashboard";
+import type { Project, Stage, ProjectTask, Plan, PlanItem } from "@/types/dashboard";
 
 // ─── Completion calculation ───────────────────────────────────────
 
@@ -140,4 +140,76 @@ export function deleteProjectTask(
           ),
         }
   );
+}
+
+// ─── Plan CRUD ───────────────────────────────────────────────────
+
+export function addPlan(plans: Plan[], plan: Plan): Plan[] {
+  return [...plans, plan];
+}
+
+export function updatePlan(
+  plans: Plan[],
+  planId: number,
+  updates: Partial<Omit<Plan, "id" | "items">>
+): Plan[] {
+  return plans.map((p) =>
+    p.id !== planId ? p : { ...p, ...updates }
+  );
+}
+
+export function deletePlan(plans: Plan[], planId: number): Plan[] {
+  return plans.filter((p) => p.id !== planId);
+}
+
+export function reorderPlans(plans: Plan[], orderedIds: number[]): Plan[] {
+  return orderedIds.map((id, idx) => {
+    const plan = plans.find((p) => p.id === id)!;
+    return { ...plan, sortOrder: idx + 1 };
+  });
+}
+
+// ─── PlanItem CRUD ───────────────────────────────────────────────
+
+export function addPlanItem(plans: Plan[], planId: number, item: PlanItem): Plan[] {
+  return plans.map((p) =>
+    p.id !== planId ? p : { ...p, items: [...p.items, item] }
+  );
+}
+
+export function updatePlanItem(
+  plans: Plan[],
+  planId: number,
+  itemId: number,
+  updates: Partial<Omit<PlanItem, "id" | "planId">>
+): Plan[] {
+  return plans.map((p) =>
+    p.id !== planId
+      ? p
+      : {
+          ...p,
+          items: p.items.map((i) =>
+            i.id !== itemId ? i : { ...i, ...updates }
+          ),
+        }
+  );
+}
+
+export function deletePlanItem(plans: Plan[], planId: number, itemId: number): Plan[] {
+  return plans.map((p) =>
+    p.id !== planId
+      ? p
+      : { ...p, items: p.items.filter((i) => i.id !== itemId) }
+  );
+}
+
+export function reorderPlanItems(plans: Plan[], planId: number, orderedIds: number[]): Plan[] {
+  return plans.map((p) => {
+    if (p.id !== planId) return p;
+    const newItems = orderedIds.map((id, idx) => {
+      const item = p.items.find((i) => i.id === id)!;
+      return { ...item, sortOrder: idx + 1 };
+    });
+    return { ...p, items: newItems };
+  });
 }

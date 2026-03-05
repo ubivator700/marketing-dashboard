@@ -55,7 +55,7 @@ export default function SortableProjectCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: project.id });
+  } = useSortable({ id: `project-${project.id}` });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -234,12 +234,18 @@ export default function SortableProjectCard({
                     </div>
 
                     {/* Meta */}
-                    <div className="flex items-center gap-2 text-[10px] text-gray-500 mb-2">
+                    <div className="flex items-center gap-2 text-[10px] text-gray-500 mb-2 flex-wrap">
                       <span>{doneTasks}/{stage.tasks.length} задач</span>
                       <span>·</span>
                       <span>
-                        {new Date(stage.deadline + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+                        {stage.startDate
+                          ? `${new Date(stage.startDate + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} — ${new Date(stage.deadline + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}`
+                          : new Date(stage.deadline + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
                       </span>
+                      {stage.startDate && (() => {
+                        const days = Math.round((new Date(stage.deadline + "T00:00:00").getTime() - new Date(stage.startDate + "T00:00:00").getTime()) / 86400000) + 1;
+                        return days > 0 ? <><span>·</span><span>{days} дн.</span></> : null;
+                      })()}
                     </div>
 
                     {/* Tasks mini-list */}
@@ -258,6 +264,11 @@ export default function SortableProjectCard({
                               {projectTaskStatusLabels[task.status]}
                             </span>
                             <span className="text-[11px] text-gray-700 flex-1 min-w-0 truncate">{task.name}</span>
+                            {task.startDate && (
+                              <span className="text-[9px] text-gray-400 flex-shrink-0">
+                                {Math.round((new Date(task.deadline + "T00:00:00").getTime() - new Date(task.startDate + "T00:00:00").getTime()) / 86400000) + 1} дн.
+                              </span>
+                            )}
                           </button>
                         ))}
                         {stage.tasks.length > 3 && (

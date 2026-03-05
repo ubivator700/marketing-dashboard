@@ -45,7 +45,7 @@ function currentMonthPrefix(): string {
 // ─── Main Component ─────────────────────────────────────────────
 
 export default function ProductTypesDashboard() {
-  const { productTypes, setProductTypes, leads } = useAppContext();
+  const { productTypes, setProductTypes, leads, averageCheck, setAverageCheck } = useAppContext();
   const [timePeriod, setTimePeriod] = useState<TimePeriod>("month");
 
   const [creating, setCreating] = useState(false);
@@ -53,6 +53,9 @@ export default function ProductTypesDashboard() {
   const [newCategory, setNewCategory] = useState<ProductCategory>("other");
   const [newAvgCheck, setNewAvgCheck] = useState("");
   const [newAvgMarkup, setNewAvgMarkup] = useState("");
+
+  const [editingCheck, setEditingCheck] = useState(false);
+  const [checkInput, setCheckInput] = useState(String(averageCheck));
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
@@ -121,6 +124,12 @@ export default function ProductTypesDashboard() {
     [leads, setProductTypes]
   );
 
+  const saveCheck = () => {
+    const val = Number(checkInput);
+    if (val > 0) setAverageCheck(val);
+    setEditingCheck(false);
+  };
+
   // Stats per product type — filtered by time period
   const ptStats = useMemo(() => {
     const filteredLeads = timePeriod === "month"
@@ -187,6 +196,33 @@ export default function ProductTypesDashboard() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Средний чек — compact editable */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Средний чек:</span>
+        {editingCheck ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              value={checkInput}
+              onChange={(e) => setCheckInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && saveCheck()}
+              onBlur={saveCheck}
+              className="w-20 px-2 py-1 border border-gray-200 dark:border-gray-600 rounded-lg text-sm font-bold dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              autoFocus
+            />
+            <span className="text-xs text-gray-400">₽</span>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setCheckInput(String(averageCheck)); setEditingCheck(true); }}
+            className="text-sm font-bold text-gray-900 dark:text-white hover:text-violet-600 transition-colors"
+            title="Нажмите для редактирования"
+          >
+            {averageCheck.toLocaleString("ru-RU")} ₽
+          </button>
+        )}
       </div>
 
       {/* Create form */}
