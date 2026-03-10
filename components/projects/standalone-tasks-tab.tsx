@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import type {
   Project,
+  Plan,
   StandaloneTask,
   StandaloneTaskStatus,
   ProjectTaskStatus,
@@ -27,6 +28,7 @@ interface TodayRow {
   source: "project" | "standalone" | "recurring";
   projectName?: string;
   stageName?: string;
+  planItemName?: string;
   // for callbacks
   _projectId?: number;
   _stageId?: number;
@@ -40,6 +42,7 @@ interface TodayRow {
 interface StandaloneTasksTabProps {
   tasks: StandaloneTask[];
   projects: Project[];
+  plans: Plan[];
   recurringTasks: RecurringTask[];
   channels: Channel[];
   onSave: (task: StandaloneTask) => void;
@@ -85,6 +88,7 @@ const STATUS_ORDER: Record<string, number> = { in_progress: 0, todo: 1, recurrin
 export default function StandaloneTasksTab({
   tasks,
   projects,
+  plans,
   recurringTasks,
   channels,
   onSave,
@@ -97,12 +101,24 @@ export default function StandaloneTasksTab({
 
   const today = todayKey();
 
+  // Plan item lookup: planItemId → planItem name
+  const planItemMap = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const plan of plans) {
+      for (const item of plan.items) {
+        map.set(item.id, item.name);
+      }
+    }
+    return map;
+  }, [plans]);
+
   // Build unified list of tasks for today
   const rows = useMemo(() => {
     const result: TodayRow[] = [];
 
     // 1) Project tasks due today
     for (const project of projects) {
+      const planItemName = project.planItemId ? planItemMap.get(project.planItemId) : undefined;
       for (const stage of project.stages) {
         for (const task of stage.tasks) {
           if (task.deadline !== today) continue;
@@ -117,6 +133,7 @@ export default function StandaloneTasksTab({
             source: "project",
             projectName: project.name,
             stageName: stage.name,
+            planItemName,
             _projectId: project.id,
             _stageId: stage.id,
             _taskId: task.id,
@@ -171,7 +188,7 @@ export default function StandaloneTasksTab({
     });
 
     return result;
-  }, [projects, tasks, recurringTasks, today]);
+  }, [projects, tasks, recurringTasks, today, planItemMap]);
 
   // Stats
   const counts = useMemo(() => {
@@ -323,6 +340,11 @@ export default function StandaloneTasksTab({
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 truncate max-w-[180px]">
                           {row.projectName}
                         </span>
+                        {row.planItemName && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 truncate max-w-[140px]">
+                            {row.planItemName}
+                          </span>
+                        )}
                         {row.stageName && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 truncate max-w-[140px]">
                             {row.stageName}

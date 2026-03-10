@@ -693,6 +693,7 @@ export default function ProjectsDashboard() {
           <StandaloneTasksTab
             tasks={standaloneTasks}
             projects={projects}
+            plans={plans}
             recurringTasks={recurringTasks}
             channels={channels}
             onSave={handleStandaloneTaskSave}

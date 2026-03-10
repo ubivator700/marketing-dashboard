@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 40px; min-width: 1200px; }
+
+  h1 { text-align: center; font-size: 28px; font-weight: 800; margin-bottom: 8px; background: linear-gradient(135deg, #818cf8, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .subtitle { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 40px; }
+
+  /* --- Sections --- */
+  .section { margin-bottom: 36px; }
+  .section-title { font-size: 15px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 16px; padding-left: 12px; border-left: 3px solid #6366f1; }
+
+  /* --- Main architecture --- */
+  .arch-row { display: flex; gap: 16px; justify-content: center; align-items: stretch; margin-bottom: 16px; }
+  .arch-box { background: #1e293b; border: 1px solid #334155; border-radius: 16px; padding: 20px; flex: 1; max-width: 380px; }
+  .arch-box.wide { max-width: 100%; flex: 1 1 100%; }
+  .arch-box h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .arch-box h3 .icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; margin: 2px; }
+
+  /* Colors */
+  .bg-indigo { background: rgba(99,102,241,0.15); color: #818cf8; }
+  .bg-violet { background: rgba(139,92,246,0.15); color: #a78bfa; }
+  .bg-emerald { background: rgba(16,185,129,0.15); color: #34d399; }
+  .bg-amber { background: rgba(245,158,11,0.15); color: #fbbf24; }
+  .bg-rose { background: rgba(244,63,94,0.15); color: #fb7185; }
+  .bg-sky { background: rgba(14,165,233,0.15); color: #38bdf8; }
+  .bg-teal { background: rgba(20,184,166,0.15); color: #2dd4bf; }
+  .bg-slate { background: rgba(100,116,139,0.15); color: #94a3b8; }
+  .bg-pink { background: rgba(236,72,153,0.15); color: #f472b6; }
+  .bg-orange { background: rgba(249,115,22,0.15); color: #fb923c; }
+
+  .icon-indigo { background: rgba(99,102,241,0.2); }
+  .icon-violet { background: rgba(139,92,246,0.2); }
+  .icon-emerald { background: rgba(16,185,129,0.2); }
+  .icon-amber { background: rgba(245,158,11,0.2); }
+  .icon-rose { background: rgba(244,63,94,0.2); }
+  .icon-sky { background: rgba(14,165,233,0.2); }
+
+  .border-indigo { border-color: rgba(99,102,241,0.3); }
+  .border-violet { border-color: rgba(139,92,246,0.3); }
+  .border-emerald { border-color: rgba(16,185,129,0.3); }
+  .border-amber { border-color: rgba(245,158,11,0.3); }
+  .border-rose { border-color: rgba(244,63,94,0.3); }
+  .border-sky { border-color: rgba(14,165,233,0.3); }
+
+  /* Arrow connectors */
+  .arrow-down { text-align: center; color: #475569; font-size: 24px; margin: 8px 0; line-height: 1; }
+  .arrow-label { text-align: center; color: #64748b; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; margin: -4px 0 4px; }
+
+  /* Data hierarchy */
+  .tree { padding-left: 0; }
+  .tree-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+  .tree-item .connector { color: #475569; flex-shrink: 0; width: 20px; text-align: center; font-family: monospace; }
+  .tree-indent { padding-left: 28px; }
+  .tree-indent-2 { padding-left: 56px; }
+
+  /* Pages grid */
+  .pages-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .page-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px 12px; }
+  .page-card .path { font-size: 10px; font-family: monospace; color: #64748b; margin-bottom: 4px; }
+  .page-card .name { font-size: 12px; font-weight: 600; }
+
+  /* API grid */
+  .api-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .api-group { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; }
+  .api-group h4 { font-size: 11px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .api-route { font-size: 10px; font-family: monospace; color: #94a3b8; margin-bottom: 3px; display: flex; gap: 6px; }
+  .api-route .method { font-weight: 700; width: 28px; flex-shrink: 0; }
+  .method-get { color: #34d399; }
+  .method-post { color: #818cf8; }
+  .method-put { color: #fbbf24; }
+  .method-del { color: #fb7185; }
+
+  /* Sync flow */
+  .flow-row { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  .flow-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 14px 20px; text-align: center; font-size: 12px; font-weight: 600; }
+  .flow-arrow { color: #475569; font-size: 20px; }
+
+  /* Auth */
+  .auth-flow { display: flex; align-items: center; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .auth-step { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 12px 16px; text-align: center; min-width: 140px; }
+  .auth-step .step-num { font-size: 10px; color: #6366f1; font-weight: 700; margin-bottom: 4px; }
+  .auth-step .step-text { font-size: 11px; }
+
+  .roles-table { display: flex; gap: 12px; justify-content: center; margin-top: 12px; }
+  .role-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 10px 16px; text-align: center; min-width: 120px; }
+  .role-card .role-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .role-card .role-desc { font-size: 10px; color: #94a3b8; }
+
+  /* Projects detail */
+  .tabs-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .tab-badge { padding: 6px 14px; border-radius: 10px; font-size: 11px; font-weight: 600; background: #1e293b; border: 1px solid #334155; }
+  .tab-badge.active { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); color: #818cf8; }
+
+  .tab-content { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tab-card { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 12px; }
+  .tab-card h4 { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .tab-card p { font-size: 10px; color: #94a3b8; line-height: 1.5; }
+
+  /* Docker */
+  .docker-row { display: flex; gap: 16px; justify-content: center; }
+  .docker-box { background: #1e293b; border: 1px solid #334155; border-radius: 14px; padding: 16px 20px; min-width: 280px; }
+  .docker-box h4 { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .docker-box ul { font-size: 11px; color: #94a3b8; list-style: none; }
+  .docker-box ul li { margin-bottom: 4px; padding-left: 12px; position: relative; }
+  .docker-box ul li::before { content: ""; position: absolute; left: 0; top: 7px; width: 4px; height: 4px; border-radius: 50%; background: #475569; }
+</style>
+</head>
+<body>
+
+<h1>Marketing Dashboard - Architecture</h1>
+<p class="subtitle">Next.js 16 + React 19 + MySQL 8 + Tailwind CSS 4 + OpenAI</p>
+
+<!-- ========== MAIN ARCHITECTURE ========== -->
+<div class="section">
+  <div class="section-title">1. General Architecture</div>
+
+  <div class="arch-row">
+    <div class="arch-box border-indigo" style="max-width:100%;flex:1 1 100%">
+      <h3><span class="icon icon-indigo">&#x1F4BB;</span> <span style="color:#818cf8">Client (Browser)</span></h3>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:600;">AuthContext</div>
+          <div style="font-size:10px;color:#94a3b8;">JWT cookie &rarr; user state (role, name)</div>
+        </div>
+        <div style="flex:2;min-width:300px;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:600;">AppContext (Central State)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:3px;">
+            <span class="tag bg-indigo">projects[]</span>
+            <span class="tag bg-violet">plans[]</span>
+            <span class="tag bg-emerald">channels[]</span>
+            <span class="tag bg-sky">leads[]</span>
+            <span class="tag bg-amber">expenses[]</span>
+            <span class="tag bg-rose">departments[]</span>
+            <span class="tag bg-teal">employees[]</span>
+            <span class="tag bg-slate">standaloneTasks[]</span>
+            <span class="tag bg-orange">recurringTasks[]</span>
+            <span class="tag bg-pink">stores[]</span>
+            <span class="tag bg-violet">productTypes[]</span>
+            <span class="tag bg-slate">settings</span>
+          </div>
+        </div>
+        <div style="flex:2;min-width:300px;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:600;">Pages</div>
+          <div style="display:flex;flex-wrap:wrap;gap:3px;">
+            <span class="tag bg-indigo">/projects</span>
+            <span class="tag bg-emerald">/channels</span>
+            <span class="tag bg-sky">/leads</span>
+            <span class="tag bg-amber">/expenses</span>
+            <span class="tag bg-violet">/products</span>
+            <span class="tag bg-pink">/stores</span>
+            <span class="tag bg-rose">/organization</span>
+            <span class="tag bg-teal">/content</span>
+            <span class="tag bg-slate">/overview</span>
+            <span class="tag bg-orange">/plans</span>
+            <span class="tag bg-slate">/admin</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">&darr;&darr;&darr;</div>
+  <div class="arrow-label">fetch (GET / POST / PUT / DELETE)</div>
+
+  <div class="arch-row">
+    <div class="arch-box border-violet" style="max-width:100%;flex:1 1 100%">
+      <h3><span class="icon icon-violet">&#x2699;</span> <span style="color:#a78bfa">API Routes (Next.js Server)</span></h3>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:600;">Middleware</div>
+          <div style="font-size:10px;color:#94a3b8;">JWT verify &rarr; requireAuth() &rarr; requireWrite(role)</div>
+        </div>
+        <div style="flex:3;min-width:400px;">
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;font-weight:600;">Endpoints (~50 routes)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:3px;">
+            <span class="tag bg-indigo">/api/projects</span>
+            <span class="tag bg-violet">/api/plans</span>
+            <span class="tag bg-emerald">/api/channels</span>
+            <span class="tag bg-sky">/api/leads</span>
+            <span class="tag bg-amber">/api/expenses</span>
+            <span class="tag bg-rose">/api/departments</span>
+            <span class="tag bg-teal">/api/employees</span>
+            <span class="tag bg-slate">/api/standalone-tasks</span>
+            <span class="tag bg-orange">/api/recurring-tasks</span>
+            <span class="tag bg-pink">/api/stores</span>
+            <span class="tag bg-violet">/api/product-types</span>
+            <span class="tag bg-slate">/api/settings</span>
+            <span class="tag bg-teal">/api/posts</span>
+            <span class="tag bg-indigo">/api/ideas</span>
+            <span class="tag bg-rose">/api/auth/*</span>
+            <span class="tag bg-amber">/api/chat</span>
+            <span class="tag bg-slate">/api/users</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">&darr;&darr;&darr;</div>
+  <div class="arrow-label">mysql2 / promise</div>
+
+  <div class="arch-row">
+    <div class="arch-box border-emerald" style="max-width:100%;flex:1 1 100%">
+      <h3><span class="icon icon-emerald">&#x1F4BE;</span> <span style="color:#34d399">MySQL 8.0</span></h3>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;">
+        <span class="tag bg-indigo">projects</span>
+        <span class="tag bg-indigo">stages</span>
+        <span class="tag bg-indigo">project_tasks</span>
+        <span class="tag bg-violet">plans</span>
+        <span class="tag bg-violet">plan_items</span>
+        <span class="tag bg-emerald">channels</span>
+        <span class="tag bg-emerald">channel_tasks</span>
+        <span class="tag bg-sky">leads</span>
+        <span class="tag bg-sky">lead_product_types</span>
+        <span class="tag bg-amber">expenses</span>
+        <span class="tag bg-rose">departments</span>
+        <span class="tag bg-rose">goals</span>
+        <span class="tag bg-rose">tasks</span>
+        <span class="tag bg-teal">employees</span>
+        <span class="tag bg-teal">employee_schedule</span>
+        <span class="tag bg-slate">standalone_tasks</span>
+        <span class="tag bg-orange">recurring_tasks</span>
+        <span class="tag bg-pink">stores</span>
+        <span class="tag bg-violet">product_types</span>
+        <span class="tag bg-teal">posts</span>
+        <span class="tag bg-teal">ideas</span>
+        <span class="tag bg-rose">users</span>
+        <span class="tag bg-slate">settings</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== DATA HIERARCHY ========== -->
+<div class="section">
+  <div class="section-title">2. Data Hierarchy</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+
+    <div class="arch-box border-indigo">
+      <h3><span class="icon icon-indigo">&#x1F4C1;</span> <span style="color:#818cf8">Projects & Plans</span></h3>
+      <div class="tree">
+        <div class="tree-item"><span class="tag bg-violet">Plan</span> <span style="font-size:11px;color:#94a3b8">(name, deadline)</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-violet">PlanItem</span> <span style="font-size:11px;color:#94a3b8">(step)</span></div>
+        <div class="tree-item tree-indent-2"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-indigo">Project</span> <span style="font-size:11px;color:#94a3b8">(planItemId FK)</span></div>
+        <div class="tree-item tree-indent-2" style="padding-left:84px;"><span style="color:#475569;font-family:monospace">&#x251C;</span> <span class="tag bg-sky">Stage</span></div>
+        <div class="tree-item tree-indent-2" style="padding-left:112px;"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-teal">ProjectTask</span></div>
+        <div class="tree-item tree-indent-2" style="padding-left:84px;"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-amber">Expense</span></div>
+      </div>
+    </div>
+
+    <div class="arch-box border-emerald">
+      <h3><span class="icon icon-emerald">&#x1F4E1;</span> <span style="color:#34d399">Channels & Leads</span></h3>
+      <div class="tree">
+        <div class="tree-item"><span class="tag bg-emerald">Channel</span> <span style="font-size:11px;color:#94a3b8">(digital/offline/loyalty)</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x251C;</span> <span class="tag bg-sky">Lead</span></div>
+        <div class="tree-item tree-indent-2"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-violet">ProductType[]</span> <span style="font-size:10px;color:#64748b">M:N</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x251C;</span> <span class="tag bg-slate">ChannelTask</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x251C;</span> <span class="tag bg-teal">StandaloneTask</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-orange">RecurringTask</span></div>
+      </div>
+    </div>
+
+    <div class="arch-box border-rose">
+      <h3><span class="icon icon-rose">&#x1F3E2;</span> <span style="color:#fb7185">Organization</span></h3>
+      <div class="tree">
+        <div class="tree-item"><span class="tag bg-rose">Department</span> <span style="font-size:11px;color:#94a3b8">(mgmt/ads/content/tech)</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x251C;</span> <span class="tag bg-amber">Goal</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x251C;</span> <span class="tag bg-teal">Task</span></div>
+        <div class="tree-item tree-indent"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-pink">Employee</span></div>
+        <div class="tree-item tree-indent-2"><span style="color:#475569;font-family:monospace">&#x2514;</span> <span class="tag bg-slate">Schedule</span></div>
+        <div style="margin-top:10px;"></div>
+        <div class="tree-item"><span class="tag bg-pink">Store</span> &nbsp; <span class="tag bg-violet">ProductType</span></div>
+        <div class="tree-item"><span class="tag bg-teal">Post</span> &nbsp; <span class="tag bg-indigo">Idea</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SYNC FLOW ========== -->
+<div class="section">
+  <div class="section-title">3. Data Sync Flow</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="arch-box border-sky">
+      <h3><span class="icon icon-sky">&#x2B07;</span> <span style="color:#38bdf8">Load (on mount)</span></h3>
+      <div class="flow-row" style="flex-wrap:wrap;">
+        <div class="flow-box" style="border-color:rgba(99,102,241,0.3);">App mounts</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(244,63,94,0.3);">GET /api/auth/me</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(16,185,129,0.3);">12 parallel GETs</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(245,158,11,0.3);">useState() x12</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(139,92,246,0.3);">Render</div>
+      </div>
+    </div>
+
+    <div class="arch-box border-amber">
+      <h3><span class="icon icon-amber">&#x1F504;</span> <span style="color:#fbbf24">Update (on change)</span></h3>
+      <div class="flow-row" style="flex-wrap:wrap;">
+        <div class="flow-box" style="border-color:rgba(99,102,241,0.3);">User edits</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(139,92,246,0.3);">setState()</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(245,158,11,0.3);">useEffect diff</div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(16,185,129,0.3);font-size:10px;">
+          <div><span style="color:#34d399">POST</span> new</div>
+          <div><span style="color:#fbbf24">PUT</span> changed</div>
+          <div><span style="color:#fb7185">DEL</span> removed</div>
+        </div>
+        <span class="flow-arrow">&rarr;</span>
+        <div class="flow-box" style="border-color:rgba(14,165,233,0.3);">MySQL</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== AUTH ========== -->
+<div class="section">
+  <div class="section-title">4. Authentication & Roles</div>
+  <div class="arch-box border-rose" style="max-width:100%;">
+    <div class="auth-flow">
+      <div class="auth-step" style="border-color:rgba(99,102,241,0.3);">
+        <div class="step-num">1</div>
+        <div class="step-text">Login form<br><span style="color:#64748b;font-size:9px">username + password</span></div>
+      </div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="auth-step" style="border-color:rgba(139,92,246,0.3);">
+        <div class="step-num">2</div>
+        <div class="step-text">POST /api/auth/login<br><span style="color:#64748b;font-size:9px">bcrypt.compare()</span></div>
+      </div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="auth-step" style="border-color:rgba(245,158,11,0.3);">
+        <div class="step-num">3</div>
+        <div class="step-text">JWT Sign<br><span style="color:#64748b;font-size:9px">HS256, 7 days</span></div>
+      </div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="auth-step" style="border-color:rgba(16,185,129,0.3);">
+        <div class="step-num">4</div>
+        <div class="step-text">Set-Cookie<br><span style="color:#64748b;font-size:9px">httpOnly: mkd_session</span></div>
+      </div>
+      <span class="flow-arrow">&rarr;</span>
+      <div class="auth-step" style="border-color:rgba(14,165,233,0.3);">
+        <div class="step-num">5</div>
+        <div class="step-text">Middleware<br><span style="color:#64748b;font-size:9px">verify on every request</span></div>
+      </div>
+    </div>
+    <div class="roles-table">
+      <div class="role-card" style="border-color:rgba(244,63,94,0.3);"><div class="role-name" style="color:#fb7185;">admin</div><div class="role-desc">Full access + user mgmt</div></div>
+      <div class="role-card" style="border-color:rgba(245,158,11,0.3);"><div class="role-name" style="color:#fbbf24;">manager</div><div class="role-desc">CRUD all data</div></div>
+      <div class="role-card" style="border-color:rgba(100,116,139,0.3);"><div class="role-name" style="color:#94a3b8;">viewer</div><div class="role-desc">Read-only</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== PROJECTS DETAIL ========== -->
+<div class="section">
+  <div class="section-title">5. Projects Page — Tabs</div>
+  <div class="arch-box border-indigo" style="max-width:100%;">
+    <div class="tabs-row">
+      <span class="tab-badge active">Projects</span>
+      <span class="tab-badge">All Tasks</span>
+      <span class="tab-badge">Today</span>
+      <span class="tab-badge">Recurring</span>
+      <span class="tab-badge">Calendar</span>
+    </div>
+    <div class="tab-content">
+      <div class="tab-card">
+        <h4 style="color:#818cf8;">&#x1F4CB; Projects Tab</h4>
+        <p>PlanBlock &rarr; PlanItemBlock &rarr; CompactProjectCard<br>
+           SortableProjectCard (drag&drop) &rarr; StageCard &rarr; TaskRow<br>
+           Modals: Project / Stage / Task edit</p>
+      </div>
+      <div class="tab-card">
+        <h4 style="color:#34d399;">&#x1F4DD; All Tasks Tab</h4>
+        <p>Unified view: project tasks + standalone tasks<br>
+           Filters: status, assignee, project, search<br>
+           Sort: deadline, status, assignee, project<br>
+           Actions: edit (&#x270F;) + delete (&#x1F5D1;) per row</p>
+      </div>
+      <div class="tab-card">
+        <h4 style="color:#fbbf24;">&#x2600; Today Dashboard</h4>
+        <p>Tasks due today from 3 sources:<br>
+           <span class="tag bg-indigo">Project</span> + <span class="tag bg-violet">Plan Item</span> + <span class="tag bg-slate">Stage</span><br>
+           <span class="tag bg-teal">Standalone</span> tasks<br>
+           <span class="tag bg-orange">Recurring</span> tasks (generateInstances)</p>
+      </div>
+      <div class="tab-card">
+        <h4 style="color:#a78bfa;">&#x1F4C5; Calendar + Gantt</h4>
+        <p>Month view with drag &amp; drop<br>
+           Gantt chart: projects/stages/tasks timeline<br>
+           Quick-add modal from calendar cell<br>
+           View modes: Calendar / Gantt</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== DOCKER ========== -->
+<div class="section">
+  <div class="section-title">6. Docker Deployment</div>
+  <div class="docker-row">
+    <div class="docker-box" style="border-color:rgba(14,165,233,0.3);">
+      <h4 style="color:#38bdf8;">&#x1F433; docker-compose.yml</h4>
+      <ul>
+        <li>2 services: db + app</li>
+        <li>Volume: mysql_data (persistent)</li>
+        <li>Port: 127.0.0.1:3000</li>
+        <li>depends_on: db (healthy)</li>
+      </ul>
+    </div>
+    <div class="docker-box" style="border-color:rgba(16,185,129,0.3);">
+      <h4 style="color:#34d399;">&#x1F4E6; db (MySQL 8.0)</h4>
+      <ul>
+        <li>init-db.sql on first start</li>
+        <li>auto-migrate.ts on app start</li>
+        <li>UTF-8 (utf8mb4)</li>
+        <li>Healthcheck: mysqladmin ping</li>
+      </ul>
+    </div>
+    <div class="docker-box" style="border-color:rgba(139,92,246,0.3);">
+      <h4 style="color:#a78bfa;">&#x26A1; app (Next.js)</h4>
+      <ul>
+        <li>node:20-alpine (3-stage build)</li>
+        <li>next build --webpack</li>
+        <li>Standalone output mode</li>
+        <li>NODE_OPTIONS: 1536 MB max</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
