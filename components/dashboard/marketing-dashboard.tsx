@@ -8,7 +8,8 @@ import { leadsByDate, leadsForMonth } from "@/lib/lead-utils";
 import { totalExpenses } from "@/lib/expense-utils";
 import { calcProjectCompletion } from "@/lib/project-utils";
 import { statusLabels, statusColors, dayTypeLabels } from "@/lib/data";
-import type { DayType, Employee, Task, StandaloneTask } from "@/types/dashboard";
+import { generateInstances } from "@/lib/recurring-utils";
+import type { DayType, Employee, Task, StandaloneTask, RecurringTask } from "@/types/dashboard";
 
 function formatDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -34,6 +35,7 @@ export default function MarketingDashboard() {
     setProjects,
     standaloneTasks,
     setStandaloneTasks,
+    recurringTasks,
   } = useAppContext();
 
   const { user } = useAuth();
@@ -132,12 +134,12 @@ export default function MarketingDashboard() {
   // Project tasks due today assigned to current user
   const myTodayProjectTasks = useMemo(() => {
     if (!employeeName) return [];
-    const result: { name: string; projectName: string; status: string; projectId: number; stageId: number; taskId: number }[] = [];
+    const result: { name: string; projectName: string; stageName: string; status: string; projectId: number; stageId: number; taskId: number }[] = [];
     for (const project of projects) {
       for (const stage of project.stages) {
         for (const task of stage.tasks) {
           if (task.deadline === todayKey && task.assignee === employeeName) {
-            result.push({ name: task.name, projectName: project.name, status: task.status, projectId: project.id, stageId: stage.id, taskId: task.id });
+            result.push({ name: task.name, projectName: project.name, stageName: stage.name, status: task.status, projectId: project.id, stageId: stage.id, taskId: task.id });
           }
         }
       }
@@ -152,6 +154,16 @@ export default function MarketingDashboard() {
       (t) => t.deadline === todayKey && t.assignee === employeeName
     );
   }, [standaloneTasks, todayKey, employeeName]);
+
+  // Recurring tasks due today assigned to current user
+  const myTodayRecurringTasks = useMemo(() => {
+    if (!employeeName) return [];
+    return recurringTasks.filter((rt) => {
+      if (rt.assignee !== employeeName || rt.status === "paused") return false;
+      const instances = generateInstances(rt, todayKey, todayKey);
+      return instances.length > 0;
+    });
+  }, [recurringTasks, todayKey, employeeName]);
 
   // Employee's expenses today
   const myTodayExpenses = useMemo(() => {
@@ -223,12 +235,12 @@ export default function MarketingDashboard() {
   }, [departments, monthPrefix]);
 
   const monthProjectTasks = useMemo(() => {
-    const result: { name: string; projectName: string; status: string; projectId: number; stageId: number; taskId: number }[] = [];
+    const result: { name: string; projectName: string; stageName: string; status: string; projectId: number; stageId: number; taskId: number }[] = [];
     for (const project of projects) {
       for (const stage of project.stages) {
         for (const task of stage.tasks) {
           if (task.deadline.startsWith(monthPrefix)) {
-            result.push({ name: task.name, projectName: project.name, status: task.status, projectId: project.id, stageId: stage.id, taskId: task.id });
+            result.push({ name: task.name, projectName: project.name, stageName: stage.name, status: task.status, projectId: project.id, stageId: stage.id, taskId: task.id });
           }
         }
       }
@@ -298,7 +310,7 @@ export default function MarketingDashboard() {
               </p>
               {!employeeName ? (
                 <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Пользователь не привязан к сотруднику</p>
-              ) : myTodayDeptTasks.length === 0 && myTodayProjectTasks.length === 0 && myTodayStandaloneTasks.length === 0 ? (
+              ) : myTodayDeptTasks.length === 0 && myTodayProjectTasks.length === 0 && myTodayStandaloneTasks.length === 0 && myTodayRecurringTasks.length === 0 ? (
                 <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет задач на сегодня</p>
               ) : (
                 <div className="space-y-1 ">
@@ -342,8 +354,14 @@ export default function MarketingDashboard() {
                           </svg>
                         )}
                       </button>
-                      <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
-                      <span className="text-[10px] text-indigo-500 flex-shrink-0">{item.projectName}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className={`text-sm text-gray-800 dark:text-gray-200 block ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-indigo-500 font-medium">{item.projectName}</span>
+                          <span className="text-[10px] text-gray-300">·</span>
+                          <span className="text-[10px] text-violet-400">{item.stageName}</span>
+                        </div>
+                      </div>
                     </div>
                   ))}
                   {/* Standalone tasks */}
@@ -368,11 +386,23 @@ export default function MarketingDashboard() {
                       <span className="text-[10px] text-amber-500 flex-shrink-0">Задача</span>
                     </div>
                   ))}
+                  {/* Recurring tasks */}
+                  {myTodayRecurringTasks.map((task) => (
+                    <div key={`recurring-${task.id}`} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-orange-50/50 dark:bg-orange-900/20">
+                      <div className="w-4 h-4 rounded-full border-2 border-orange-300 flex-shrink-0 flex items-center justify-center">
+                        <svg className="w-2.5 h-2.5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-800 dark:text-gray-200 flex-1">{task.name}</span>
+                      <span className="text-[10px] text-orange-500 flex-shrink-0">Регулярная</span>
+                    </div>
+                  ))}
                 </div>
               )}
               {employeeName && (
                 <p className="text-[10px] text-gray-400 mt-2">
-                  {myTodayDeptTasks.length + myTodayProjectTasks.length + myTodayStandaloneTasks.length} задач
+                  {myTodayDeptTasks.length + myTodayProjectTasks.length + myTodayStandaloneTasks.length + myTodayRecurringTasks.length} задач
                 </p>
               )}
             </div>
@@ -617,8 +647,14 @@ export default function MarketingDashboard() {
                             </svg>
                           )}
                         </button>
-                        <span className={`text-sm text-gray-800 dark:text-gray-200 flex-1 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
-                        <span className="text-[10px] text-indigo-500 flex-shrink-0">{item.projectName}</span>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm text-gray-800 dark:text-gray-200 block ${item.status === "done" ? "line-through text-gray-400" : ""}`}>{item.name}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-indigo-500 font-medium">{item.projectName}</span>
+                            <span className="text-[10px] text-gray-300">·</span>
+                            <span className="text-[10px] text-violet-400">{item.stageName}</span>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

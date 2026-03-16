@@ -10,12 +10,17 @@ import {
 } from "@/lib/channel-utils";
 import { leadsByDate, leadsForMonth } from "@/lib/lead-utils";
 import { totalExpensesForChannel } from "@/lib/expense-utils";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar,
+} from "recharts";
 import ChannelCardList from "./channel-card-list";
 import ChannelDetailModal from "./channel-detail-modal";
 import ChannelEditModal from "./channel-edit-modal";
 import StoreFilter from "@/components/ui/store-filter";
 import ProductTypeFilter from "@/components/ui/product-type-filter";
+
+const MONTH_NAMES_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 
 export default function ChannelsDashboard() {
   const {
@@ -36,6 +41,14 @@ export default function ChannelsDashboard() {
   // Modal states
   const [detailChannel, setDetailChannel] = useState<Channel | null>(null);
   const [editChannel, setEditChannel] = useState<{ channel: Channel | null } | null>(null);
+
+  // Chart state
+  const [chartChannelId, setChartChannelId] = useState<number | null>(null); // null = all channels
+
+  // Collapsible block states (default: closed)
+  const [groupStatsOpen, setGroupStatsOpen] = useState(false);
+  const [pieChartsOpen, setPieChartsOpen] = useState(false);
+  const [dailyStatsOpen, setDailyStatsOpen] = useState(false);
 
   // Inline edits
   const [editingMonthly, setEditingMonthly] = useState(false);
@@ -207,6 +220,16 @@ export default function ChannelsDashboard() {
   const overallConversion = monthFilteredLeads.length > 0 ? Math.round((overallResults / monthFilteredLeads.length) * 100) : 0;
   const overallCostPerResult = overallResults > 0 ? Math.round(channelExpensesTotal / overallResults) : null;
 
+  // ─── Today stats (for "План и статистика за сегодня" panel) ───
+  const todayExpenses = useMemo(
+    () => filteredExpenses.filter((e) => e.date === todayKey).reduce((sum, e) => sum + e.amount, 0),
+    [filteredExpenses, todayKey]
+  );
+  const todayCostPerLead = todayLeads.length > 0 ? Math.round(todayExpenses / todayLeads.length) : null;
+  const todayMeasurements = todayLeads.filter((l) => l.result === "measurement").length;
+  const todaySales = todayLeads.filter((l) => l.result === "sale").length;
+  const todayResults = todayMeasurements + todaySales;
+
   // ─── Pie chart data ───
   const PIE_COLORS = ["#6366f1","#f59e0b","#10b981","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f97316","#64748b"];
   const channelPieData = useMemo(() => {
@@ -221,6 +244,37 @@ export default function ChannelsDashboard() {
       };
     }).filter((d) => d.leads > 0 || d.expenses > 0);
   }, [channels, monthFilteredLeads, monthFilteredExpenses]);
+
+  // ─── Daily stats for line chart ───
+  const dailyChartData = useMemo(() => {
+    const daysCount = getDaysInMonth(selectedYear, selectedMonth);
+    const data: { day: string; date: string; leads: number; measurements: number; expenses: number }[] = [];
+
+    for (let d = 1; d <= daysCount; d++) {
+      const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayLeads = monthFilteredLeads.filter((l) => {
+        if (chartChannelId !== null && l.channelId !== chartChannelId) return false;
+        return l.date === dateStr;
+      });
+      const dayExpenses = monthFilteredExpenses.filter((e) => {
+        if (chartChannelId !== null && e.channelId !== chartChannelId) return false;
+        return e.date === dateStr;
+      });
+
+      data.push({
+        day: String(d),
+        date: dateStr,
+        leads: dayLeads.length,
+        measurements: dayLeads.filter((l) => l.result === "measurement" || l.result === "sale").length,
+        expenses: dayExpenses.reduce((sum, e) => sum + e.amount, 0),
+      });
+    }
+    return data;
+  }, [monthFilteredLeads, monthFilteredExpenses, selectedYear, selectedMonth, chartChannelId]);
+
+  function getDaysInMonth(y: number, m: number): number {
+    return new Date(y, m + 1, 0).getDate();
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -283,7 +337,7 @@ export default function ChannelsDashboard() {
         </div>
 
         {/* ─── Top stat blocks ─── */}
-        <div className={`grid grid-cols-1 ${isCurrentMonth ? "md:grid-cols-3" : "md:grid-cols-2"} gap-4 mb-6`}>
+        <div className={`grid grid-cols-1 ${isCurrentMonth ? "md:grid-cols-4" : "md:grid-cols-2"} gap-4 mb-6`}>
 
           {/* ═══ Block 1: План на день — only for current month ═══ */}
           {isCurrentMonth && (
@@ -313,6 +367,43 @@ export default function ChannelsDashboard() {
                   size="large"
                   color={dailyPct >= 100 ? "#10b981" : dailyPct >= 50 ? "#f59e0b" : "#ef4444"}
                 />
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* ═══ Block 1b: План и статистика за сегодня — only for current month ═══ */}
+          {isCurrentMonth && (
+          <div className="bg-emerald-50 dark:bg-emerald-900/30 rounded-2xl border border-emerald-200 dark:border-emerald-700 shadow-sm p-5 flex flex-col">
+            <p className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 mb-3 font-bold">
+              План и статистика за сегодня
+            </p>
+            <div className="flex-1 flex flex-col justify-between">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Выполнение плана</p>
+                  <p className={`text-lg font-black ${dailyPct >= 100 ? "text-green-600" : dailyPct >= 50 ? "text-amber-600" : "text-red-500"}`}>
+                    {dailyPct}%
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Результаты</p>
+                  <p className="text-lg font-black text-violet-600">
+                    {todayResults} <span className="text-[10px] font-normal text-gray-400">{todayMeasurements} зам. · {todaySales} прод.</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
+                  <p className="text-lg font-black text-red-500">
+                    {todayExpenses.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость лида</p>
+                  <p className="text-lg font-black text-amber-600">
+                    {todayCostPerLead !== null ? `${todayCostPerLead.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -421,66 +512,125 @@ export default function ChannelsDashboard() {
           ))}
         </div>
 
-        {/* Group stats: expenses, cost per lead per direction */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {groupStats.map((g) => (
-            <div
-              key={g.id}
-              className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{g.label}</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
-                    {g.leadCount} лид{g.leadCount === 1 ? "" : g.leadCount < 5 ? "а" : "ов"}
-                  </span>
-                  <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                    {g.channelCount} канал{g.channelCount === 1 ? "" : g.channelCount < 5 ? "а" : "ов"}
-                  </span>
+        {/* Group stats: expenses, cost per lead per direction — collapsible, default closed */}
+        <CollapsibleSection title="Цифровой / Оффлайн / Лояльность" open={groupStatsOpen} onToggle={() => setGroupStatsOpen(!groupStatsOpen)}>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {groupStats.map((g) => (
+              <div
+                key={g.id}
+                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">{g.label}</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full">
+                      {g.leadCount} лид{g.leadCount === 1 ? "" : g.leadCount < 5 ? "а" : "ов"}
+                    </span>
+                    <span className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
+                      {g.channelCount} канал{g.channelCount === 1 ? "" : g.channelCount < 5 ? "а" : "ов"}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Результаты</p>
+                    <p className="text-sm font-bold text-violet-600">
+                      {g.resultCount} <span className="text-[10px] font-normal text-gray-400">{g.measurementCount} зам. · {g.saleCount} прод.</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Конверсия</p>
+                    <p className="text-sm font-bold text-emerald-600">{g.conversion}%</p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
+                    <p className="text-sm font-bold text-red-500">
+                      {g.expenses.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость лида</p>
+                    <p className="text-sm font-bold text-amber-600">
+                      {g.costPerLead !== null ? `${g.costPerLead.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость результата</p>
+                    <p className="text-sm font-bold text-teal-600">
+                      {g.costPerResult !== null ? `${g.costPerResult.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Результаты</p>
-                  <p className="text-sm font-bold text-violet-600">
-                    {g.resultCount} <span className="text-[10px] font-normal text-gray-400">{g.measurementCount} зам. · {g.saleCount} прод.</span>
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Конверсия</p>
-                  <p className="text-sm font-bold text-emerald-600">{g.conversion}%</p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Расходы</p>
-                  <p className="text-sm font-bold text-red-500">
-                    {g.expenses.toLocaleString("ru-RU")} <span className="text-[10px] font-normal text-gray-400">₽</span>
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость лида</p>
-                  <p className="text-sm font-bold text-amber-600">
-                    {g.costPerLead !== null ? `${g.costPerLead.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500">Стоимость результата</p>
-                  <p className="text-sm font-bold text-teal-600">
-                    {g.costPerResult !== null ? `${g.costPerResult.toLocaleString("ru-RU")}` : "—"} <span className="text-[10px] font-normal text-gray-400">₽</span>
-                  </p>
-                </div>
+            ))}
+          </div>
+        </CollapsibleSection>
+
+        {/* ─── Pie charts ─── collapsible, default closed */}
+        {channelPieData.length > 0 && (
+          <CollapsibleSection title="Лиды / Замеры / Расходы по каналам" open={pieChartsOpen} onToggle={() => setPieChartsOpen(!pieChartsOpen)}>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <PieChartCard title="Лиды по каналам" data={channelPieData} dataKey="leads" />
+              <PieChartCard title="Замеры по каналам" data={channelPieData} dataKey="measurements" />
+              <PieChartCard title="Расходы по каналам" data={channelPieData} dataKey="expenses" suffix=" ₽" formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}к` : String(v)} />
+            </div>
+          </CollapsibleSection>
+        )}
+
+        {/* ─── Daily stats chart ─── collapsible, default closed */}
+        <CollapsibleSection title="Статистика по дням" open={dailyStatsOpen} onToggle={() => setDailyStatsOpen(!dailyStatsOpen)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+            <div className="flex items-center justify-end mb-4">
+              <select
+                value={chartChannelId ?? ""}
+                onChange={(e) => setChartChannelId(e.target.value === "" ? null : Number(e.target.value))}
+                className="px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Все каналы</option>
+                {channels.map((ch) => (
+                  <option key={ch.id} value={ch.id}>{ch.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Leads & measurements chart */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Заявки и замеры</p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={dailyChartData} barGap={0} barCategoryGap="20%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: 12, fontSize: 12 }}
+                      labelFormatter={(v) => `${v} ${MONTH_NAMES_SHORT[selectedMonth]}`}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="leads" name="Заявки" fill="#6366f1" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="measurements" name="Результаты" fill="#10b981" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Expenses chart */}
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Расходы</p>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={dailyChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: 12, fontSize: 12 }}
+                      labelFormatter={(v) => `${v} ${MONTH_NAMES_SHORT[selectedMonth]}`}
+                      formatter={(value: unknown) => [`${Number(value).toLocaleString("ru-RU")} ₽`, "Расходы"]}
+                    />
+                    <Line type="monotone" dataKey="expenses" name="Расходы" stroke="#ef4444" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
-          ))}
-        </div>
-
-        {/* ─── Pie charts ─── */}
-        {channelPieData.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <PieChartCard title="Лиды по каналам" data={channelPieData} dataKey="leads" />
-            <PieChartCard title="Замеры по каналам" data={channelPieData} dataKey="measurements" />
-            <PieChartCard title="Расходы по каналам" data={channelPieData} dataKey="expenses" suffix=" ₽" formatValue={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}к` : String(v)} />
           </div>
-        )}
+        </CollapsibleSection>
 
         {/* Channel cards */}
         <ChannelCardList
@@ -521,6 +671,43 @@ export default function ChannelsDashboard() {
           onClose={() => setEditChannel(null)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Collapsible Section ─────────────────────────────────────────
+
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-6">
+      <button
+        onClick={onToggle}
+        className="flex items-center gap-2 mb-3 group"
+      >
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform ${open ? "rotate-0" : "-rotate-90"}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+        <span className="text-sm font-semibold text-gray-600 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+          {title}
+        </span>
+      </button>
+      {open && children}
     </div>
   );
 }

@@ -53,6 +53,11 @@ interface ProjectsCalendarTabProps {
     taskId: number,
     status: import("@/types/dashboard").StandaloneTaskStatus
   ) => void;
+  onUpdateStageDates?: (
+    projectId: number,
+    stageId: number,
+    updates: { startDate?: string; deadline?: string }
+  ) => void;
 }
 
 /** Unified calendar item: project task or standalone task. */
@@ -247,6 +252,7 @@ export default function ProjectsCalendarTab({
   onCreateStandaloneTask,
   onToggleProjectTaskStatus,
   onToggleStandaloneTaskStatus,
+  onUpdateStageDates,
 }: ProjectsCalendarTabProps) {
   const [view, setView] = useState<CalendarView>("week");
   const [weekStart, setWeekStart] = useState(() => getWeekStart(new Date()));
@@ -1301,16 +1307,16 @@ export default function ProjectsCalendarTab({
   return (
     <div className="space-y-4">
       {/* ═══ Filters Row ═══ */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {/* Assignee filter */}
         <div className="flex items-center gap-1.5">
-          <label className="text-sm text-gray-500 font-medium whitespace-nowrap">Исполнитель:</label>
+          <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Исполнитель:</label>
           <select
             value={filterAssignee ?? "__all__"}
             onChange={(e) =>
               setFilterAssignee(e.target.value === "__all__" ? null : e.target.value)
             }
-            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300"
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 max-w-[180px]"
           >
             <option value="__all__">Все сотрудники</option>
             {allAssignees.map((name) => (
@@ -1323,13 +1329,13 @@ export default function ProjectsCalendarTab({
 
         {/* Project filter */}
         <div className="flex items-center gap-1.5">
-          <label className="text-sm text-gray-500 font-medium">Проект:</label>
+          <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Проект:</label>
           <select
             value={filterProjectId ?? "__all__"}
             onChange={(e) =>
               setFilterProjectId(e.target.value === "__all__" ? null : Number(e.target.value))
             }
-            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300"
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 max-w-[180px]"
           >
             <option value="__all__">Все проекты</option>
             {projects.map((p) => (
@@ -1342,13 +1348,13 @@ export default function ProjectsCalendarTab({
 
         {/* Channel filter */}
         <div className="flex items-center gap-1.5">
-          <label className="text-sm text-gray-500 font-medium">Канал:</label>
+          <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Канал:</label>
           <select
             value={filterChannelId ?? "__all__"}
             onChange={(e) =>
               setFilterChannelId(e.target.value === "__all__" ? null : Number(e.target.value))
             }
-            className="text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300"
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 max-w-[180px]"
           >
             <option value="__all__">Все каналы</option>
             {channels.map((ch) => (
@@ -1439,8 +1445,16 @@ export default function ProjectsCalendarTab({
             projects={projects}
             plans={plans}
             standaloneTasks={standaloneTasks}
+            employees={employees}
             onToggleProjectTaskStatus={onToggleProjectTaskStatus}
             onToggleStandaloneTaskStatus={onToggleStandaloneTaskStatus}
+            onUpdateProjectTaskDeadline={(projectId, stageId, taskId, newDeadline) =>
+              onUpdateProjectTask?.(projectId, stageId, taskId, { deadline: newDeadline })
+            }
+            onUpdateStandaloneTaskDeadline={(taskId, newDeadline) =>
+              onUpdateStandaloneTask?.(taskId, { deadline: newDeadline })
+            }
+            onUpdateStageDates={onUpdateStageDates}
           />
         )}
 

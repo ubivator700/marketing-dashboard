@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { PlanItem, Project } from "@/types/dashboard";
+import type { PlanItem, Project, Stage, ProjectTask } from "@/types/dashboard";
 import { calcProjectCompletion } from "@/lib/project-utils";
 import { PLAN_ITEM_COLORS } from "@/lib/plan-colors";
 import CompactProjectCard from "./compact-project-card";
@@ -17,6 +18,11 @@ interface PlanItemBlockProps {
   onAddProject: () => void;
   onEditProject: (project: Project) => void;
   onDeleteProject: (projectId: number) => void;
+  onEditStage?: (projectId: number, stage: Stage) => void;
+  onDeleteStage?: (projectId: number, stageId: number) => void;
+  onAddStage?: (projectId: number) => void;
+  onEditTask?: (projectId: number, stageId: number, task: ProjectTask) => void;
+  onAddTask?: (projectId: number, stageId: number) => void;
 }
 
 export default function PlanItemBlock({
@@ -27,7 +33,13 @@ export default function PlanItemBlock({
   onAddProject,
   onEditProject,
   onDeleteProject,
+  onEditStage,
+  onDeleteStage,
+  onAddStage,
+  onEditTask,
+  onAddTask,
 }: PlanItemBlockProps) {
+  const [collapsed, setCollapsed] = useState(false);
   const color = PLAN_ITEM_COLORS[item.color] || PLAN_ITEM_COLORS.blue;
   const droppableId = `planitem-${item.id}`;
 
@@ -58,6 +70,11 @@ export default function PlanItemBlock({
     month: "short",
   });
 
+  // Days left
+  const now = new Date();
+  const deadlineDate = new Date(item.deadline + "T00:00:00");
+  const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
   const projectIds = projects.map((p) => `project-${p.id}`);
 
   return (
@@ -76,14 +93,18 @@ export default function PlanItemBlock({
 
       <div className="pl-4 pr-3 py-3">
         {/* Header */}
-        <div className="flex items-start justify-between gap-2 mb-2 group">
-          <div className="flex items-start gap-2 min-w-0 flex-1">
+        <div
+          className="flex items-center justify-between gap-2 mb-2 group cursor-pointer"
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Drag handle */}
             <button
               {...attributes}
               {...listeners}
-              className={`mt-0.5 ${color.meta} opacity-50 hover:opacity-80 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none`}
+              className={`${color.meta} opacity-50 hover:opacity-80 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none`}
               title="Перетащить"
+              onClick={(e) => e.stopPropagation()}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
                 <circle cx="5" cy="3" r="1.5" />
@@ -94,6 +115,21 @@ export default function PlanItemBlock({
                 <circle cx="11" cy="13" r="1.5" />
               </svg>
             </button>
+            {/* Collapse chevron */}
+            <button
+              className={`${color.meta} opacity-60 flex-shrink-0 transition-transform`}
+              onClick={(e) => { e.stopPropagation(); setCollapsed(!collapsed); }}
+            >
+              <svg
+                className={`w-3.5 h-3.5 transition-transform ${collapsed ? "-rotate-90" : "rotate-0"}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
             <div className="min-w-0">
               <h4 className={`text-sm font-bold ${color.text} leading-tight`}>{item.name}</h4>
               {item.result && (
@@ -101,62 +137,80 @@ export default function PlanItemBlock({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-            <button
-              onClick={onEdit}
-              className={`${color.meta} hover:opacity-80 p-0.5 text-xs`}
-              title="Редактировать"
-            >
-              ✏️
-            </button>
-            <button
-              onClick={() => {
-                if (window.confirm("Удалить пункт плана?")) onDelete();
-              }}
-              className="text-red-600 hover:text-red-800 p-0.5 text-xs"
-              title="Удалить"
-            >
-              🗑️
-            </button>
+          {/* Right side: deadline + responsible — large and prominent */}
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {item.responsible && (
+              <span className={`text-sm font-bold ${color.text} bg-white/60 px-2 py-0.5 rounded-lg`}>
+                {item.responsible}
+              </span>
+            )}
+            <div className="text-right">
+              <div className={`text-sm font-bold ${daysLeft < 7 ? "text-red-600" : daysLeft < 30 ? "text-amber-600" : color.text}`}>
+                {deadlineLabel}
+              </div>
+              <div className={`text-[11px] font-semibold ${daysLeft < 7 ? "text-red-500" : daysLeft < 30 ? "text-amber-500" : color.meta}`}>
+                {daysLeft > 0 ? `${daysLeft} дн.` : "просрочен"}
+              </div>
+            </div>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={onEdit}
+                className={`${color.meta} hover:opacity-80 p-0.5 text-xs`}
+                title="Редактировать"
+              >
+                ✏️
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Удалить пункт плана?")) onDelete();
+                }}
+                className="text-red-600 hover:text-red-800 p-0.5 text-xs"
+                title="Удалить"
+              >
+                🗑️
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Meta */}
-        <div className={`flex items-center gap-3 text-[10px] ${color.meta} mb-2`}>
-          <span>{startLabel ? `${startLabel} — ${deadlineLabel}` : `Дедлайн: ${deadlineLabel}`}</span>
-          {item.responsible && (
-            <>
-              <span>·</span>
-              <span className="font-medium">{item.responsible}</span>
-            </>
-          )}
-          <span>·</span>
+        <div className={`flex items-center gap-3 text-[10px] ${color.meta} mb-2 flex-wrap`}>
+          {startLabel && <span className="font-medium">{startLabel} —</span>}
           <span>{projects.length} проект{projects.length === 1 ? "" : projects.length < 5 ? "а" : "ов"}</span>
         </div>
 
-        {/* Projects inside this PlanItem */}
-        <SortableContext items={projectIds} strategy={verticalListSortingStrategy}>
-          <div className="space-y-1.5">
-            {projects.map((project) => (
-              <CompactProjectCard
-                key={project.id}
-                project={project}
-                onEdit={() => onEditProject(project)}
-                onDelete={() => {
-                  if (window.confirm("Удалить проект?")) onDeleteProject(project.id);
-                }}
-              />
-            ))}
-          </div>
-        </SortableContext>
+        {/* Projects inside this PlanItem — collapsible */}
+        {!collapsed && (
+          <>
+            <SortableContext items={projectIds} strategy={verticalListSortingStrategy}>
+              <div className="space-y-1.5">
+                {projects.map((project) => (
+                  <CompactProjectCard
+                    key={project.id}
+                    project={project}
+                    onEdit={() => onEditProject(project)}
+                    onDelete={() => {
+                      if (window.confirm("Удалить проект?")) onDeleteProject(project.id);
+                    }}
+                    showInline
+                    onEditStage={onEditStage}
+                    onDeleteStage={onDeleteStage}
+                    onAddStage={onAddStage}
+                    onEditTask={onEditTask}
+                    onAddTask={onAddTask}
+                  />
+                ))}
+              </div>
+            </SortableContext>
 
-        {/* Add project button */}
-        <button
-          onClick={onAddProject}
-          className={`w-full mt-2 py-1.5 border border-dashed rounded-lg text-[11px] transition-colors bg-white/50 hover:bg-white/70 ${color.meta} border-current/30`}
-        >
-          + Добавить проект
-        </button>
+            <button
+              onClick={onAddProject}
+              className={`w-full mt-2 py-1.5 border border-dashed rounded-lg text-[11px] transition-colors bg-white/50 hover:bg-white/70 ${color.meta} border-current/30`}
+            >
+              + Добавить проект
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

@@ -40,8 +40,7 @@ import {
   deletePlanItem as removePlanItem,
   reorderPlanItems,
 } from "@/lib/project-utils";
-import { totalExpensesForProject } from "@/lib/expense-utils";
-import SortableProjectCard from "./sortable-project-card";
+
 import ProjectEditModal from "./project-edit-modal";
 import StageEditModal from "./stage-edit-modal";
 import ProjectTaskEditModal from "./project-task-edit-modal";
@@ -419,6 +418,25 @@ export default function ProjectsDashboard() {
     [setStandaloneTasks]
   );
 
+  // ─── Stage dates update (Gantt drag & resize) ───
+  const handleUpdateStageDates = useCallback(
+    (projectId: number, stageId: number, updates: { startDate?: string; deadline?: string }) => {
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.id !== projectId) return p;
+          return {
+            ...p,
+            stages: p.stages.map((s) => {
+              if (s.id !== stageId) return s;
+              return { ...s, ...updates };
+            }),
+          };
+        })
+      );
+    },
+    [setProjects]
+  );
+
   // ─── Recurring Task CRUD ───
   const handleRecurringTaskSave = useCallback(
     (task: RecurringTask) => {
@@ -576,6 +594,41 @@ export default function ProjectsDashboard() {
                         onAddProjectToItem={(itemId) => setProjectModal({ project: null, planItemId: itemId })}
                         onEditProject={(p) => setProjectModal({ project: p })}
                         onDeleteProject={handleProjectDelete}
+                        onEditStage={(pid, stage) =>
+                          setStageModal({
+                            stage,
+                            projectId: pid,
+                            projectName: projects.find((p) => p.id === pid)?.name ?? "",
+                          })
+                        }
+                        onDeleteStage={(pid, sid) => handleStageDelete(pid, sid)}
+                        onAddStage={(pid) =>
+                          setStageModal({
+                            stage: null,
+                            projectId: pid,
+                            projectName: projects.find((p) => p.id === pid)?.name ?? "",
+                          })
+                        }
+                        onEditTask={(pid, sid, task) => {
+                          const project = projects.find((p) => p.id === pid);
+                          const stage = project?.stages.find((s) => s.id === sid);
+                          setTaskModal({
+                            task,
+                            projectId: pid,
+                            stageId: sid,
+                            stageName: stage?.name ?? "",
+                          });
+                        }}
+                        onAddTask={(pid, sid) => {
+                          const project = projects.find((p) => p.id === pid);
+                          const stage = project?.stages.find((s) => s.id === sid);
+                          setTaskModal({
+                            task: null,
+                            projectId: pid,
+                            stageId: sid,
+                            stageName: stage?.name ?? "",
+                          });
+                        }}
                       />
                     ))}
 
@@ -585,14 +638,16 @@ export default function ProjectsDashboard() {
                         items={standaloneProjects.map((p) => `project-${p.id}`)}
                         strategy={verticalListSortingStrategy}
                       >
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                           {standaloneProjects.map((project) => (
-                            <SortableProjectCard
+                            <CompactProjectCard
                               key={project.id}
                               project={project}
-                              totalExpenses={totalExpensesForProject(expenses, project.id)}
-                              onEditProject={(p) => setProjectModal({ project: p })}
-                              onDeleteProject={handleProjectDelete}
+                              showInline
+                              onEdit={() => setProjectModal({ project })}
+                              onDelete={() => {
+                                if (window.confirm("Удалить проект?")) handleProjectDelete(project.id);
+                              }}
                               onEditStage={(pid, stage) =>
                                 setStageModal({
                                   stage,
@@ -727,6 +782,7 @@ export default function ProjectsDashboard() {
             onCreateStandaloneTask={handleStandaloneTaskSave}
             onToggleProjectTaskStatus={handleUpdateProjectTaskStatus}
             onToggleStandaloneTaskStatus={handleUpdateStandaloneTaskStatus}
+            onUpdateStageDates={handleUpdateStageDates}
           />
         )}
       </div>
