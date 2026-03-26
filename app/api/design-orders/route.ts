@@ -94,6 +94,10 @@ export async function POST(request: NextRequest) {
     const filePath = `/uploads/orders/${safeName}`;
     const fs = require("fs");
     const path = require("path");
+    const uploadsDir = path.join(process.cwd(), "public", "uploads", "orders");
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
     const fullPath = path.join(process.cwd(), "public", filePath);
     fs.writeFileSync(fullPath, buffer);
 
