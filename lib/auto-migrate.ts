@@ -201,6 +201,11 @@ export async function runAutoMigrate() {
     }
 
     // ───────────────────────────────────────────────────────────
+    //  EMPLOYEES — extra columns
+    // ───────────────────────────────────────────────────────────
+    await ensureColumn(conn, "employees", "position", "VARCHAR(100) NULL DEFAULT NULL");
+
+    // ───────────────────────────────────────────────────────────
     //  PLANS (Plan > PlanItem > Project hierarchy)
     // ───────────────────────────────────────────────────────────
     if (!(await tableExists(conn, "plans"))) {
@@ -590,6 +595,44 @@ export async function runAutoMigrate() {
           description TEXT          NOT NULL,
           status      ENUM('new','in_progress','approved','rejected') NOT NULL DEFAULT 'new',
           date        DATE          NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  DESIGN_ORDERS
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "design_orders"))) {
+      console.log("  [migrate] CREATE TABLE design_orders");
+      await conn.query(`
+        CREATE TABLE design_orders (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          title       VARCHAR(500)  NOT NULL,
+          description TEXT          NOT NULL DEFAULT (''),
+          author      VARCHAR(200)  NOT NULL,
+          status      ENUM('new','accepted','rejected') NOT NULL DEFAULT 'new',
+          created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          accepted_by VARCHAR(100)  NULL,
+          task_id     BIGINT        NULL,
+          FOREIGN KEY (task_id) REFERENCES standalone_tasks(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  DESIGN_ORDER_ATTACHMENTS
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "design_order_attachments"))) {
+      console.log("  [migrate] CREATE TABLE design_order_attachments");
+      await conn.query(`
+        CREATE TABLE design_order_attachments (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          order_id    BIGINT        NOT NULL,
+          file_name   VARCHAR(500)  NOT NULL,
+          file_path   VARCHAR(1000) NOT NULL,
+          file_type   VARCHAR(100)  NOT NULL,
+          file_size   BIGINT        NOT NULL DEFAULT 0,
+          FOREIGN KEY (order_id) REFERENCES design_orders(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `);
     }
