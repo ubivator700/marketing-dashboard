@@ -190,6 +190,7 @@ export default function PlanBlock({
                   key={item.id}
                   item={item}
                   projects={projectsByItem.get(item.id) || []}
+                  parentCancelled={isPlanCancelled}
                   onEdit={() => onEditItem(item)}
                   onDelete={() => onDeleteItem(item.id)}
                   onAddProject={() => onAddProjectToItem(item.id)}

@@ -13,6 +13,7 @@ import CompactProjectCard from "./compact-project-card";
 interface PlanItemBlockProps {
   item: PlanItem;
   projects: Project[];
+  parentCancelled?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onAddProject: () => void;
@@ -28,6 +29,7 @@ interface PlanItemBlockProps {
 export default function PlanItemBlock({
   item,
   projects,
+  parentCancelled,
   onEdit,
   onDelete,
   onAddProject,
@@ -76,7 +78,7 @@ export default function PlanItemBlock({
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
   // Check if all tasks in all non-cancelled projects under this item are done
-  const isItemCancelled = !!item.cancelled;
+  const isItemCancelled = !!item.cancelled || !!parentCancelled;
   const activeProjects = projects.filter((p) => !p.cancelled);
   const allItemTasks = activeProjects.flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)));
   const isItemCompleted = !isItemCancelled && allItemTasks.length > 0 && allItemTasks.every((t) => t.status === "done");
@@ -195,6 +197,7 @@ export default function PlanItemBlock({
                   <CompactProjectCard
                     key={project.id}
                     project={project}
+                    parentCancelled={isItemCancelled}
                     onEdit={() => onEditProject(project)}
                     onDelete={() => {
                       if (window.confirm("Удалить проект?")) onDeleteProject(project.id);

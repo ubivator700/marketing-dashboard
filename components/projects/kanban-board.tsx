@@ -6,6 +6,7 @@ import type { Project, Employee, ProjectTaskStatus } from "@/types/dashboard";
 interface KanbanBoardProps {
   projects: Project[];
   employees: Employee[];
+  cancelledProjectIds?: Set<number>;
   onToggleTaskStatus?: (projectId: number, stageId: number, taskId: number, status: ProjectTaskStatus) => void;
 }
 
@@ -17,7 +18,7 @@ const COLUMN_CONFIG: { id: KanbanColumn; label: string; color: string; bg: strin
   { id: "done", label: "Готово", color: "text-green-700", bg: "bg-green-50" },
 ];
 
-export default function KanbanBoard({ projects, employees, onToggleTaskStatus }: KanbanBoardProps) {
+export default function KanbanBoard({ projects, employees, cancelledProjectIds, onToggleTaskStatus }: KanbanBoardProps) {
   const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
   const [filterProjectId, setFilterProjectId] = useState<number | null>(null);
   const [filterToday, setFilterToday] = useState(false);
@@ -43,7 +44,7 @@ export default function KanbanBoard({ projects, employees, onToggleTaskStatus }:
     }[] = [];
 
     for (const project of projects) {
-      if (project.cancelled) continue;
+      if (project.cancelled || cancelledProjectIds?.has(project.id)) continue;
       if (filterProjectId !== null && project.id !== filterProjectId) continue;
       for (const stage of project.stages) {
         if (stage.cancelled) continue;

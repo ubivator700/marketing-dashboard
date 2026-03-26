@@ -168,6 +168,23 @@ export default function ProjectsDashboard() {
     );
   }, [plans, filterEmployee, projectsByPlanItem]);
 
+  // Set of effectively cancelled project IDs (own cancelled OR parent plan/planItem cancelled)
+  const effectivelyCancelledProjectIds = useMemo(() => {
+    const cancelledItemIds = new Set<number>();
+    for (const plan of plans) {
+      for (const item of plan.items) {
+        if (plan.cancelled || item.cancelled) cancelledItemIds.add(item.id);
+      }
+    }
+    const set = new Set<number>();
+    for (const p of projects) {
+      if (p.cancelled || (p.planItemId != null && cancelledItemIds.has(p.planItemId))) {
+        set.add(p.id);
+      }
+    }
+    return set;
+  }, [projects, plans]);
+
   // ─── DnD ───
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -633,6 +650,7 @@ export default function ProjectsDashboard() {
   }, [sortedPlans, projectsByPlanItem, standaloneProjects]);
 
   // Overdue items — projects, plans, plan items — only show to responsible person and admin
+  // Uses hierarchy: cancelled plan → all items cancelled; cancelled item → all projects cancelled; etc.
   const overdueItems = useMemo(() => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -640,10 +658,26 @@ export default function ProjectsDashboard() {
     const currentName = user?.employeeName;
     const items: { id: string; name: string; type: string; deadline: string }[] = [];
 
-    // Overdue projects (skip cancelled projects/stages/tasks)
+    // Build set of effectively cancelled planItemIds (own or parent plan cancelled)
+    const cancelledItemIds = new Set<number>();
+    for (const plan of plans) {
+      for (const item of plan.items) {
+        if (plan.cancelled || item.cancelled) cancelledItemIds.add(item.id);
+      }
+    }
+
+    // Helper: is a project effectively cancelled (own, or its planItem/plan is cancelled)
+    const isProjectEffectivelyCancelled = (p: Project) =>
+      !!p.cancelled || (p.planItemId != null && cancelledItemIds.has(p.planItemId));
+
+    // Helper: get active tasks from a project (skip cancelled stages/tasks)
+    const getActiveTasks = (p: Project) =>
+      p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled));
+
+    // Overdue projects (skip effectively cancelled)
     for (const p of projects) {
-      if (p.cancelled) continue;
-      const allTasks = p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled));
+      if (isProjectEffectivelyCancelled(p)) continue;
+      const allTasks = getActiveTasks(p);
       const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
       if (allDone || p.deadline >= todayStr) continue;
       if (isAdmin || p.responsible === currentName) {
@@ -651,12 +685,12 @@ export default function ProjectsDashboard() {
       }
     }
 
-    // Overdue plans (skip cancelled plans and exclude cancelled projects/stages/tasks)
+    // Overdue plans (skip cancelled)
     for (const plan of plans) {
       if (plan.cancelled) continue;
       if (plan.deadline >= todayStr) continue;
       const allTasks = plan.items.filter((i) => !i.cancelled).flatMap((item) =>
-        (projectsByPlanItem.get(item.id) || []).filter((p) => !p.cancelled).flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)))
+        (projectsByPlanItem.get(item.id) || []).filter((p) => !p.cancelled).flatMap(getActiveTasks)
       );
       const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
       if (!allDone && isAdmin) {
@@ -664,14 +698,14 @@ export default function ProjectsDashboard() {
       }
     }
 
-    // Overdue plan items (skip cancelled plans/items and exclude cancelled projects/stages/tasks)
+    // Overdue plan items (skip cancelled plans/items)
     for (const plan of plans) {
       if (plan.cancelled) continue;
       for (const item of plan.items) {
         if (item.cancelled) continue;
         if (item.deadline >= todayStr) continue;
         const itemProjects = (projectsByPlanItem.get(item.id) || []).filter((p) => !p.cancelled);
-        const allTasks = itemProjects.flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)));
+        const allTasks = itemProjects.flatMap(getActiveTasks);
         const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
         if (!allDone) {
           const isResponsible = item.responsible === currentName;
@@ -919,6 +953,7 @@ export default function ProjectsDashboard() {
           <KanbanBoard
             projects={projects}
             employees={employees}
+            cancelledProjectIds={effectivelyCancelledProjectIds}
             onToggleTaskStatus={handleUpdateProjectTaskStatus}
           />
         )}

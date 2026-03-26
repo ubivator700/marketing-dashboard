@@ -10,6 +10,7 @@ import { calcProjectCompletion } from "@/lib/project-utils";
 
 interface CompactProjectCardProps {
   project: Project;
+  parentCancelled?: boolean;
   onEdit: () => void;
   onDelete: () => void;
   showInline?: boolean;
@@ -28,6 +29,7 @@ const TASK_STATUS_COLORS: Record<string, string> = {
 
 export default function CompactProjectCard({
   project,
+  parentCancelled,
   onEdit,
   onDelete,
   showInline,
@@ -68,7 +70,7 @@ export default function CompactProjectCard({
   const deadlineDate = new Date(project.deadline + "T00:00:00");
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  const isCancelled = !!project.cancelled;
+  const isCancelled = !!project.cancelled || !!parentCancelled;
   const activeStages = project.stages.filter((s) => !s.cancelled);
   const allTasks = activeStages.flatMap((s) => s.tasks.filter((t) => !t.cancelled));
   const doneTasks = allTasks.filter((t) => t.status === "done").length;
@@ -211,6 +213,7 @@ export default function CompactProjectCard({
                 key={stage.id}
                 stage={stage}
                 projectId={project.id}
+                parentCancelled={isCancelled}
                 onEditStage={onEditStage}
                 onDeleteStage={onDeleteStage}
                 onEditTask={onEditTask}
@@ -238,6 +241,7 @@ export default function CompactProjectCard({
 function StageInlineBlock({
   stage,
   projectId,
+  parentCancelled,
   onEditStage,
   onDeleteStage,
   onEditTask,
@@ -245,13 +249,14 @@ function StageInlineBlock({
 }: {
   stage: Stage;
   projectId: number;
+  parentCancelled?: boolean;
   onEditStage?: (projectId: number, stage: Stage) => void;
   onDeleteStage?: (projectId: number, stageId: number) => void;
   onEditTask?: (projectId: number, stageId: number, task: ProjectTask) => void;
   onAddTask?: (projectId: number, stageId: number) => void;
 }) {
   const [stageExpanded, setStageExpanded] = useState(false);
-  const isStageCancelled = !!stage.cancelled;
+  const isStageCancelled = !!stage.cancelled || !!parentCancelled;
   const activeTasks = stage.tasks.filter((t) => !t.cancelled);
   const doneTasks = activeTasks.filter((t) => t.status === "done").length;
   const totalTasks = activeTasks.length;
@@ -363,8 +368,8 @@ function StageInlineBlock({
               className="flex items-center gap-2 px-3 py-1 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 transition-colors group/task cursor-pointer"
               onClick={() => onEditTask?.(projectId, stage.id, task)}
             >
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.cancelled ? "bg-gray-300" : TASK_STATUS_COLORS[task.status] || "bg-gray-200"}`} />
-              <span className={`text-[11px] flex-1 truncate ${task.cancelled ? "text-gray-400 line-through" : task.status === "done" ? "text-gray-400 line-through" : "text-gray-700"}`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${(task.cancelled || isStageCancelled) ? "bg-gray-300" : TASK_STATUS_COLORS[task.status] || "bg-gray-200"}`} />
+              <span className={`text-[11px] flex-1 truncate ${(task.cancelled || isStageCancelled) ? "text-gray-400 line-through" : task.status === "done" ? "text-gray-400 line-through" : "text-gray-700"}`}>
                 {task.name}
               </span>
               {task.assignee && (
