@@ -11,7 +11,7 @@ export async function middleware(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
 
   // Public routes
-  if (pathname === "/login" || pathname === "/api/auth/login") {
+  if (pathname === "/login" || pathname === "/api/auth/login" || pathname === "/orders" || pathname === "/api/design-orders") {
     if (token && pathname === "/login") {
       // Already logged in — redirect to dashboard
       try {

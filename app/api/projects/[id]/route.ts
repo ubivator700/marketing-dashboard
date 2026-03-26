@@ -13,7 +13,7 @@ async function fetchProject(projectId: number) {
   const p = projectRows[0];
 
   const [stageRows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM stages WHERE project_id = ? ORDER BY id",
+    "SELECT * FROM stages WHERE project_id = ? ORDER BY priority, id",
     [projectId]
   );
   const [taskRows] = await pool.query<RowDataPacket[]>(
@@ -110,7 +110,7 @@ export async function PUT(
       [body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null, projectId]
     );
 
-    // 2. Get existing stage IDs
+    // 2. Get existing stage IDs for THIS project
     const [existingStageRows] = await conn.execute<RowDataPacket[]>(
       "SELECT id FROM stages WHERE project_id = ?",
       [projectId]
@@ -128,28 +128,49 @@ export async function PUT(
     }
 
     // 4. Insert or update each stage
-    for (const stage of body.stages || []) {
+    for (let idx = 0; idx < (body.stages || []).length; idx++) {
+      const stage = body.stages[idx];
+      const stagePriority = stage.priority ?? idx;
       let stageId: number;
 
       if (stage.id && existingStageIds.has(stage.id)) {
-        // Update existing stage
+        // Update existing stage (already belongs to this project)
         await conn.execute(
-          "UPDATE stages SET name=?, result=?, description=?, start_date=?, deadline=? WHERE id=? AND project_id=?",
-          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stage.id, projectId]
+          "UPDATE stages SET name=?, result=?, description=?, start_date=?, deadline=?, priority=? WHERE id=? AND project_id=?",
+          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stagePriority, stage.id, projectId]
         );
         stageId = stage.id;
       } else if (stage.id) {
-        // Insert new stage with client-provided id
-        await conn.execute(
-          "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId]
+        // Check if stage exists in another project (cross-project move)
+        const [globalCheck] = await conn.execute<RowDataPacket[]>(
+          "SELECT id, project_id FROM stages WHERE id = ?",
+          [stage.id]
         );
-        stageId = stage.id;
+        if (globalCheck.length > 0) {
+          // Move stage from another project to this one
+          await conn.execute(
+            "UPDATE stages SET project_id=?, name=?, result=?, description=?, start_date=?, deadline=?, priority=? WHERE id=?",
+            [projectId, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stagePriority, stage.id]
+          );
+          // Also update all tasks' project_id
+          await conn.execute(
+            "UPDATE project_tasks SET project_id=? WHERE stage_id=?",
+            [projectId, stage.id]
+          );
+          stageId = stage.id;
+        } else {
+          // Insert new stage with client-provided id
+          await conn.execute(
+            "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stagePriority]
+          );
+          stageId = stage.id;
+        }
       } else {
         // Insert new stage with auto-increment
         const [result] = await conn.execute(
-          "INSERT INTO stages (name, result, description, start_date, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?)",
-          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId]
+          "INSERT INTO stages (name, result, description, start_date, deadline, project_id, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stagePriority]
         );
         stageId = (result as any).insertId;
       }
@@ -175,15 +196,26 @@ export async function PUT(
       for (const task of stage.tasks || []) {
         if (task.id && existingTaskIds.has(task.id)) {
           await conn.execute(
-            "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=? WHERE id=?",
-            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, task.id]
+            "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=?, project_id=? WHERE id=?",
+            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, projectId, task.id]
           );
         } else if (task.id) {
-          // Insert new task with client-provided id
-          await conn.execute(
-            "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+          // Check if task exists globally (moved with stage)
+          const [taskCheck] = await conn.execute<RowDataPacket[]>(
+            "SELECT id FROM project_tasks WHERE id = ?",
+            [task.id]
           );
+          if (taskCheck.length > 0) {
+            await conn.execute(
+              "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=?, stage_id=?, project_id=? WHERE id=?",
+              [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.id]
+            );
+          } else {
+            await conn.execute(
+              "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+            );
+          }
         } else {
           // Insert new task with auto-increment
           await conn.execute(
@@ -195,13 +227,15 @@ export async function PUT(
     }
 
     await conn.commit();
-  } catch (error) {
+  } catch (err) {
     await conn.rollback();
-    throw error;
-  } finally {
     conn.release();
+    console.error("PUT /api/projects/[id] error:", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
+  conn.release();
   const updated = await fetchProject(projectId);
   return NextResponse.json(updated);
 }

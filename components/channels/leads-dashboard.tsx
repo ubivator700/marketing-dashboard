@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import type { Lead } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
 import { addLead, updateLead, deleteLead as removeLead, leadsByDate } from "@/lib/lead-utils";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import LeadsList from "./leads-list";
 import LeadEditModal from "./lead-edit-modal";
 import LeadsCalendar from "./leads-calendar";
 import StoreFilter from "@/components/ui/store-filter";
 import ProductTypeFilter from "@/components/ui/product-type-filter";
+
+const PIE_COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#84cc16"];
 
 type LeadTabId = "list" | "calendar";
 
@@ -98,6 +101,93 @@ export default function LeadsDashboard() {
     { id: "calendar", label: "Календарь" },
   ];
 
+  // Month stats
+  const currentMonthPrefix = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  const monthlyLeads = useMemo(() => filteredLeads.filter((l) => l.date.startsWith(currentMonthPrefix)), [filteredLeads, currentMonthPrefix]);
+
+  // Pie by channel
+  const pieByChannel = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of monthlyLeads) {
+      const ch = channels.find((c) => c.id === l.channelId)?.name || "Неизвестный";
+      map.set(ch, (map.get(ch) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyLeads, channels]);
+
+  // Pie by contact method
+  const CONTACT_LABELS: Record<string, string> = { salon: "Салон", phone: "Телефон", social: "Соцсети", old_request: "Старая заявка" };
+  const pieByContact = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of monthlyLeads) {
+      const label = CONTACT_LABELS[l.contactMethod] || l.contactMethod;
+      map.set(label, (map.get(label) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyLeads]);
+
+  // Pie by result
+  const RESULT_LABELS: Record<string, string> = { measurement: "Замер", sale: "Продажа", deferred: "Отложен" };
+  const pieByResult = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of monthlyLeads) {
+      const label = RESULT_LABELS[l.result] || l.result;
+      map.set(label, (map.get(label) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyLeads]);
+
+  // Pie by store
+  const pieByStore = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const l of monthlyLeads) {
+      const s = l.storeId ? stores.find((st) => st.id === l.storeId)?.name || "Неизвестный" : "Без магазина";
+      map.set(s, (map.get(s) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyLeads, stores]);
+
+  const [statsOpen, setStatsOpen] = useState(false);
+
+  const handleExportMonthStats = useCallback(async () => {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Лиды за месяц");
+    ws.columns = [
+      { header: "Имя", key: "name", width: 25 },
+      { header: "Канал", key: "channel", width: 20 },
+      { header: "Способ контакта", key: "contact", width: 18 },
+      { header: "Результат", key: "result", width: 15 },
+      { header: "Дата", key: "date", width: 12 },
+      { header: "Магазин", key: "store", width: 20 },
+      { header: "Заметка", key: "note", width: 30 },
+    ];
+    for (const l of monthlyLeads) {
+      ws.addRow({
+        name: l.name,
+        channel: channels.find((c) => c.id === l.channelId)?.name || "",
+        contact: CONTACT_LABELS[l.contactMethod] || l.contactMethod,
+        result: RESULT_LABELS[l.result] || l.result,
+        date: l.date,
+        store: l.storeId ? stores.find((s) => s.id === l.storeId)?.name || "" : "",
+        note: l.note || "",
+      });
+    }
+    ws.getRow(1).font = { bold: true };
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads_${currentMonthPrefix}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [monthlyLeads, channels, stores, currentMonthPrefix]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -184,6 +274,38 @@ export default function LeadsDashboard() {
           </div>
         )}
 
+        {/* Monthly statistics with pie charts */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
+          <div
+            onClick={() => setStatsOpen((v) => !v)}
+            className="w-full flex items-center justify-between p-5 text-left cursor-pointer"
+          >
+            <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Статистика за месяц</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">{monthlyLeads.length} лидов</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleExportMonthStats(); }}
+                className="px-2 py-1 text-[10px] font-medium bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+              >
+                Excel
+              </button>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 text-gray-400 transition-transform ${statsOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
+          {statsOpen && (
+            <div className="px-5 pb-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {pieByChannel.length > 0 && <LeadPieBlock title="По каналам" data={pieByChannel} />}
+                {pieByContact.length > 0 && <LeadPieBlock title="По способу контакта" data={pieByContact} />}
+                {pieByResult.length > 0 && <LeadPieBlock title="По результату" data={pieByResult} />}
+                {pieByStore.length > 0 && <LeadPieBlock title="По магазинам" data={pieByStore} />}
+              </div>
+            </div>
+          )}
+        </div>
+
         {tab === "list" && (
           <LeadsList
             leads={filteredLeads}
@@ -247,6 +369,24 @@ export default function LeadsDashboard() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LeadPieBlock({ title, data }: { title: string; data: { name: string; value: number; color: string }[] }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-600 mb-2">{title}</p>
+      <ResponsiveContainer width="100%" height={180}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} label={({ name, percent }: any) => `${String(name).slice(0, 10)} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={9}>
+            {data.map((d, i) => (
+              <Cell key={i} fill={d.color} />
+            ))}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+      </ResponsiveContainer>
     </div>
   );
 }

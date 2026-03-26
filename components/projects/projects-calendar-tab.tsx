@@ -74,6 +74,7 @@ interface CalendarItem {
   statusColor: string;
   source: "project" | "standalone" | "recurring";
   projectName?: string;
+  stageName?: string;
   channelName?: string;
   color: string; // block color
   // Extra ids for update callbacks
@@ -112,7 +113,7 @@ interface ResizeState {
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
-const HOUR_HEIGHT = 60; // px per hour row
+const HOUR_HEIGHT = 80; // px per hour row
 const START_HOUR = 8;
 const END_HOUR = 20;
 const HOURS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
@@ -368,6 +369,7 @@ export default function ProjectsCalendarTab({
             statusColor: projectTaskStatusColors[task.status],
             source: "project",
             projectName: project.name,
+            stageName: stage.name,
             channelName: undefined,
             color: empColor || PROJECT_TASK_COLOR,
             _projectId: project.id,
@@ -382,8 +384,6 @@ export default function ProjectsCalendarTab({
     for (const task of standaloneTasks) {
       if (filterAssignee && task.assignee !== filterAssignee) continue;
       if (filterChannelId !== null && task.channelId !== filterChannelId) continue;
-      // If project filter is active, skip standalone tasks (they are not project tasks)
-      // but only if the project filter is set to a specific project
       if (filterProjectId !== null) continue;
 
       const channelName = task.channelId ? channelNameMap.get(task.channelId) : undefined;
@@ -1044,7 +1044,10 @@ export default function ProjectsCalendarTab({
                   style={{ backgroundColor: item.source === "project" ? PROJECT_TASK_COLOR : item.source === "recurring" ? RECURRING_TASK_COLOR : STANDALONE_TASK_COLOR }}
                 />
               )}
-              <span className={`truncate ${isDone ? "line-through text-gray-400" : "text-gray-700"}`}>{item.name}</span>
+              <span className={`${isDone ? "line-through text-gray-400" : "text-gray-700"}`}>{item.name}</span>
+              {item.source === "project" && item.projectName && (
+                <span className="text-[9px] text-indigo-400 ml-1">{item.projectName}{item.stageName ? ` · ${item.stageName}` : ""}</span>
+              )}
             </div>
           );
         })}
@@ -1281,9 +1284,20 @@ export default function ProjectsCalendarTab({
                   : item.dueTime}
               </span>
             </div>
-            <p className={`text-xs text-gray-800 mt-0.5 leading-tight line-clamp-2 ${item.status === "done" ? "line-through text-gray-400" : ""}`}>
+            <p className={`text-xs text-gray-800 mt-0.5 leading-tight ${item.status === "done" ? "line-through text-gray-400" : ""}`}>
               {item.name}
             </p>
+            {item.source === "project" && item.projectName && (
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[9px] text-indigo-500 font-medium">{item.projectName}</span>
+                {item.stageName && (
+                  <>
+                    <span className="text-[9px] text-gray-300">·</span>
+                    <span className="text-[9px] text-violet-400">{item.stageName}</span>
+                  </>
+                )}
+              </div>
+            )}
             {clampedHeight > 50 && (
               <span className="text-[10px] text-gray-500 mt-0.5 block">
                 {item.assignee} · {formatDurationShort(duration)}

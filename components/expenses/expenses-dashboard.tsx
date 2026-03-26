@@ -5,9 +5,12 @@ import type { Expense } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
 import { useAuth } from "@/lib/auth-context";
 import { totalExpenses as calcTotal, totalExpensesForChannel } from "@/lib/expense-utils";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import ExpenseTable from "./expense-table";
 import ExpenseEditModal from "./expense-edit-modal";
 import StoreFilter from "@/components/ui/store-filter";
+
+const PIE_COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#84cc16"];
 
 export default function ExpensesDashboard() {
   const {
@@ -109,6 +112,91 @@ export default function ExpensesDashboard() {
     }
     return map;
   }, [filteredExpenses]);
+
+  // Monthly expenses filtered by current month
+  const monthlyExpenses = useMemo(() => {
+    return filteredExpenses.filter((e) => e.date.startsWith(currentMonthPrefix));
+  }, [filteredExpenses, currentMonthPrefix]);
+
+  const monthlyTotal = useMemo(() => monthlyExpenses.reduce((s, e) => s + e.amount, 0), [monthlyExpenses]);
+
+  // Pie chart data: by responsible
+  const pieByResponsible = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of monthlyExpenses) {
+      map.set(e.responsible || "Без ответственного", (map.get(e.responsible || "Без ответственного") ?? 0) + e.amount);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyExpenses]);
+
+  // Pie chart data: by channel
+  const pieByChannel = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of monthlyExpenses) {
+      const ch = e.channelId ? channels.find((c) => c.id === e.channelId)?.name || "Неизвестный" : "Без канала";
+      map.set(ch, (map.get(ch) ?? 0) + e.amount);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyExpenses, channels]);
+
+  // Pie chart data: by project
+  const pieByProject = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of monthlyExpenses) {
+      const p = e.projectId ? projects.find((pr) => pr.id === e.projectId)?.name || "Неизвестный" : "Без проекта";
+      map.set(p, (map.get(p) ?? 0) + e.amount);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyExpenses, projects]);
+
+  // Pie chart data: by store
+  const pieByStore = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of monthlyExpenses) {
+      const s = e.storeId ? stores.find((st) => st.id === e.storeId)?.name || "Неизвестный" : "Без магазина";
+      map.set(s, (map.get(s) ?? 0) + e.amount);
+    }
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+  }, [monthlyExpenses, stores]);
+
+  const [statsOpen, setStatsOpen] = useState(false);
+
+  // Export month stats to Excel
+  const handleExportMonthStats = useCallback(async () => {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Расходы за месяц");
+    ws.columns = [
+      { header: "Название", key: "name", width: 30 },
+      { header: "Сумма", key: "amount", width: 15 },
+      { header: "Ответственный", key: "responsible", width: 20 },
+      { header: "Дата", key: "date", width: 12 },
+      { header: "Канал", key: "channel", width: 20 },
+      { header: "Проект", key: "project", width: 20 },
+      { header: "Магазин", key: "store", width: 20 },
+    ];
+    for (const e of monthlyExpenses) {
+      ws.addRow({
+        name: e.name,
+        amount: e.amount,
+        responsible: e.responsible,
+        date: e.date,
+        channel: e.channelId ? channels.find((c) => c.id === e.channelId)?.name || "" : "",
+        project: e.projectId ? projects.find((p) => p.id === e.projectId)?.name || "" : "",
+        store: e.storeId ? stores.find((s) => s.id === e.storeId)?.name || "" : "",
+      });
+    }
+    // Style header
+    ws.getRow(1).font = { bold: true };
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `expenses_${currentMonthPrefix}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [monthlyExpenses, channels, projects, stores, currentMonthPrefix]);
 
   // ─── Excel import ───
   const handleDownloadTemplate = async () => {
@@ -225,14 +313,70 @@ export default function ExpensesDashboard() {
           </div>
         </div>
 
-        {/* Channel breakdown */}
+        {/* Monthly statistics with pie charts + channel summary */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
+          <div
+            onClick={() => setStatsOpen((v) => !v)}
+            className="w-full flex items-center justify-between p-5 text-left cursor-pointer"
+          >
+            <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Статистика за месяц</h2>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white">{monthlyTotal.toLocaleString("ru-RU")} ₽</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleExportMonthStats(); }}
+                className="px-2 py-1 text-[10px] font-medium bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+              >
+                Excel
+              </button>
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 text-gray-400 transition-transform ${statsOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+              </svg>
+            </div>
+          </div>
+          {statsOpen && (
+            <div className="px-5 pb-5 space-y-5">
+              {/* Channel spending summary */}
+              {pieByChannel.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2 uppercase tracking-wide">Расходы по рекламным каналам</p>
+                  <div className="space-y-1.5">
+                    {pieByChannel.sort((a, b) => b.value - a.value).map((item, i) => {
+                      const pct = monthlyTotal > 0 ? Math.round((item.value / monthlyTotal) * 100) : 0;
+                      return (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                          <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 min-w-0 truncate">{item.name}</span>
+                          <div className="w-28 bg-gray-100 dark:bg-gray-700 rounded-full h-2 hidden sm:block">
+                            <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: item.color }} />
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white w-28 text-right">{item.value.toLocaleString("ru-RU")} ₽</span>
+                          <span className="text-xs text-gray-400 w-10 text-right">{pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Pie charts */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <PieChartBlock title="По ответственным" data={pieByResponsible} />
+                <PieChartBlock title="По каналам" data={pieByChannel} />
+                <PieChartBlock title="По проектам" data={pieByProject} />
+                <PieChartBlock title="По магазинам" data={pieByStore} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Channel breakdown (all time) */}
         {channelExpenseStats.size > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
             <button
               onClick={() => setChannelBreakdownOpen((v) => !v)}
               className="w-full flex items-center justify-between p-5 text-left"
             >
-              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Расходы по рекламным каналам</h2>
+              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Расходы по рекламным каналам (все время)</h2>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {Array.from(channelExpenseStats.values()).reduce((a, b) => a + b, 0).toLocaleString("ru-RU")} ₽
@@ -271,14 +415,14 @@ export default function ExpensesDashboard() {
           </div>
         )}
 
-        {/* Project breakdown */}
+        {/* Project breakdown (all time) */}
         {projectExpenseStats.size > 0 && (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6">
             <button
               onClick={() => setProjectBreakdownOpen((v) => !v)}
               className="w-full flex items-center justify-between p-5 text-left"
             >
-              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Расходы по проектам</h2>
+              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200">Расходы по проектам (все время)</h2>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {Array.from(projectExpenseStats.values()).reduce((a, b) => a + b, 0).toLocaleString("ru-RU")} ₽
@@ -393,6 +537,25 @@ export default function ExpensesDashboard() {
           onClose={() => setEditing(null)}
         />
       )}
+    </div>
+  );
+}
+
+function PieChartBlock({ title, data }: { title: string; data: { name: string; value: number; color: string }[] }) {
+  if (data.length === 0) return null;
+  return (
+    <div>
+      <p className="text-xs font-semibold text-gray-600 mb-2">{title}</p>
+      <ResponsiveContainer width="100%" height={180}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} label={({ name, percent }: any) => `${String(name).slice(0, 10)} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={9}>
+            {data.map((d, i) => (
+              <Cell key={i} fill={d.color} />
+            ))}
+          </Pie>
+          <Tooltip formatter={(v: any) => `${Number(v).toLocaleString("ru-RU")} ₽`} />
+        </PieChart>
+      </ResponsiveContainer>
     </div>
   );
 }

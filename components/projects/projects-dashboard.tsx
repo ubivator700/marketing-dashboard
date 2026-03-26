@@ -39,6 +39,7 @@ import {
   updatePlanItem,
   deletePlanItem as removePlanItem,
   reorderPlanItems,
+  reorderStages,
 } from "@/lib/project-utils";
 
 import ProjectEditModal from "./project-edit-modal";
@@ -52,6 +53,7 @@ import PlanBlock from "./plan-block";
 import PlanEditModal from "./plan-edit-modal";
 import PlanItemEditModal from "./plan-item-edit-modal";
 import CompactProjectCard from "./compact-project-card";
+import KanbanBoard from "./kanban-board";
 
 // ─── Modal state types ───
 interface EditProjectModal { project: Project | null; planItemId?: number | null }
@@ -60,7 +62,7 @@ interface EditTaskModal { task: ProjectTask | null; projectId: number; stageId: 
 interface EditPlanModal { plan: Plan | null }
 interface EditPlanItemModal { item: PlanItem | null; planId: number }
 
-type ProjectsTabId = "projects" | "standalone" | "recurring" | "calendar" | "all-tasks";
+type ProjectsTabId = "projects" | "standalone" | "recurring" | "calendar" | "all-tasks" | "kanban";
 
 // ─── Standalone droppable zone ───
 function StandaloneDropZone({ children, isEmpty }: { children: React.ReactNode; isEmpty: boolean }) {
@@ -96,6 +98,37 @@ export default function ProjectsDashboard() {
 
   const [tab, setTab] = useState<ProjectsTabId>("projects");
 
+  // Employee filter — default to current user's employeeName
+  const [filterEmployee, setFilterEmployee] = useState<string | "__all__">(user?.employeeName ?? "__all__");
+
+  // All unique employee names from projects (responsible + task assignees)
+  const allProjectEmployees = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of projects) {
+      if (p.responsible) set.add(p.responsible);
+      for (const s of p.stages) {
+        for (const t of s.tasks) {
+          if (t.assignee) set.add(t.assignee);
+        }
+      }
+    }
+    return [...set].sort();
+  }, [projects]);
+
+  // Filtered projects: show projects where employee is responsible or assigned to any task
+  const filteredProjects = useMemo(() => {
+    if (filterEmployee === "__all__") return projects;
+    return projects.filter((p) => {
+      if (p.responsible === filterEmployee) return true;
+      for (const s of p.stages) {
+        for (const t of s.tasks) {
+          if (t.assignee === filterEmployee) return true;
+        }
+      }
+      return false;
+    });
+  }, [projects, filterEmployee]);
+
   // Modal states
   const [projectModal, setProjectModal] = useState<EditProjectModal | null>(null);
   const [stageModal, setStageModal] = useState<EditStageModal | null>(null);
@@ -104,21 +137,16 @@ export default function ProjectsDashboard() {
   const [planItemModal, setPlanItemModal] = useState<EditPlanItemModal | null>(null);
   const [standaloneEditTask, setStandaloneEditTask] = useState<StandaloneTask | null>(null);
 
-  // Sorted data
-  const sortedPlans = useMemo(
-    () => [...plans].sort((a, b) => a.sortOrder - b.sortOrder),
-    [plans]
-  );
-
+  // Sorted data — uses filteredProjects for display
   const standaloneProjects = useMemo(
-    () => projects.filter((p) => p.planItemId == null).sort((a, b) => a.priority - b.priority),
-    [projects]
+    () => filteredProjects.filter((p) => p.planItemId == null).sort((a, b) => a.priority - b.priority),
+    [filteredProjects]
   );
 
-  // Map: planItemId → Project[]
+  // Map: planItemId → Project[] (filtered)
   const projectsByPlanItem = useMemo(() => {
     const map = new Map<number, Project[]>();
-    for (const p of projects) {
+    for (const p of filteredProjects) {
       if (p.planItemId != null) {
         if (!map.has(p.planItemId)) map.set(p.planItemId, []);
         map.get(p.planItemId)!.push(p);
@@ -129,7 +157,16 @@ export default function ProjectsDashboard() {
       map.set(key, arr.sort((a, b) => a.priority - b.priority));
     }
     return map;
-  }, [projects]);
+  }, [filteredProjects]);
+
+  // Only show plans that have at least one filtered project
+  const sortedPlans = useMemo(() => {
+    const allSorted = [...plans].sort((a, b) => a.sortOrder - b.sortOrder);
+    if (filterEmployee === "__all__") return allSorted;
+    return allSorted.filter((plan) =>
+      plan.items.some((item) => (projectsByPlanItem.get(item.id) ?? []).length > 0)
+    );
+  }, [plans, filterEmployee, projectsByPlanItem]);
 
   // ─── DnD ───
   const sensors = useSensors(
@@ -220,6 +257,76 @@ export default function ProjectsDashboard() {
             setPlans(reorderPlanItems(plans, plan.id, reordered.map((i) => i.id)));
             return;
           }
+        }
+      }
+
+      // ─── Stage drag ───
+      if (activeId.startsWith("stage-")) {
+        const activeStageId = parseInt(activeId.replace("stage-", ""), 10);
+
+        // Find source project
+        const sourceProject = projects.find((p) => p.stages.some((s) => s.id === activeStageId));
+        if (!sourceProject) return;
+        const draggedStage = sourceProject.stages.find((s) => s.id === activeStageId)!;
+
+        // Dropped on another stage
+        if (overId.startsWith("stage-")) {
+          const overStageId = parseInt(overId.replace("stage-", ""), 10);
+          const targetProject = projects.find((p) => p.stages.some((s) => s.id === overStageId));
+          if (!targetProject) return;
+
+          if (sourceProject.id === targetProject.id) {
+            // Same project → reorder
+            const oldIdx = sourceProject.stages.findIndex((s) => s.id === activeStageId);
+            const newIdx = sourceProject.stages.findIndex((s) => s.id === overStageId);
+            if (oldIdx === -1 || newIdx === -1) return;
+            const reordered = arrayMove(sourceProject.stages, oldIdx, newIdx);
+            setProjects(reorderStages(projects, sourceProject.id, reordered.map((s) => s.id)));
+          } else {
+            // Different project → move stage
+            const overIdx = targetProject.stages.findIndex((s) => s.id === overStageId);
+            const movedStage = { ...draggedStage, projectId: targetProject.id };
+            // Update tasks projectId too
+            movedStage.tasks = movedStage.tasks.map((t) => ({ ...t, projectId: targetProject.id }));
+
+            setProjects((prev) =>
+              prev.map((p) => {
+                if (p.id === sourceProject.id) {
+                  const newStages = p.stages.filter((s) => s.id !== activeStageId);
+                  return { ...p, stages: newStages };
+                }
+                if (p.id === targetProject.id) {
+                  const newStages = [...p.stages];
+                  newStages.splice(overIdx, 0, movedStage);
+                  return { ...p, stages: newStages };
+                }
+                return p;
+              })
+            );
+          }
+          return;
+        }
+
+        // Dropped on a project card → move to end of that project
+        if (overId.startsWith("project-")) {
+          const targetProjectId = parseInt(overId.replace("project-", ""), 10);
+          if (targetProjectId === sourceProject.id) return;
+
+          const movedStage = { ...draggedStage, projectId: targetProjectId };
+          movedStage.tasks = movedStage.tasks.map((t) => ({ ...t, projectId: targetProjectId }));
+
+          setProjects((prev) =>
+            prev.map((p) => {
+              if (p.id === sourceProject.id) {
+                return { ...p, stages: p.stages.filter((s) => s.id !== activeStageId) };
+              }
+              if (p.id === targetProjectId) {
+                return { ...p, stages: [...p.stages, movedStage] };
+              }
+              return p;
+            })
+          );
+          return;
         }
       }
 
@@ -491,6 +598,7 @@ export default function ProjectsDashboard() {
 
   const tabs: { id: ProjectsTabId; label: string }[] = [
     { id: "projects", label: "Проекты" },
+    { id: "kanban", label: "Канбан" },
     { id: "all-tasks", label: "Все задачи" },
     { id: "standalone", label: "Текущие задачи" },
     { id: "recurring", label: "Регулярные" },
@@ -508,26 +616,94 @@ export default function ProjectsDashboard() {
         const itemProjects = projectsByPlanItem.get(item.id) || [];
         for (const p of itemProjects) {
           ids.push(`project-${p.id}`);
+          for (const s of p.stages) {
+            ids.push(`stage-${s.id}`);
+          }
         }
       }
     }
     // Standalone project IDs
     for (const p of standaloneProjects) {
       ids.push(`project-${p.id}`);
+      for (const s of p.stages) {
+        ids.push(`stage-${s.id}`);
+      }
     }
     return ids;
   }, [sortedPlans, projectsByPlanItem, standaloneProjects]);
 
+  // Overdue items — projects, plans, plan items — only show to responsible person and admin
+  const overdueItems = useMemo(() => {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const isAdmin = user?.role === "admin";
+    const currentName = user?.employeeName;
+    const items: { id: string; name: string; type: string; deadline: string }[] = [];
+
+    // Overdue projects
+    for (const p of projects) {
+      const allTasks = p.stages.flatMap((s) => s.tasks);
+      const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
+      if (allDone || p.deadline >= todayStr) continue;
+      if (isAdmin || p.responsible === currentName) {
+        items.push({ id: `p-${p.id}`, name: p.name, type: "Проект", deadline: p.deadline });
+      }
+    }
+
+    // Overdue plans
+    for (const plan of plans) {
+      if (plan.deadline >= todayStr) continue;
+      const allTasks = plan.items.flatMap((item) =>
+        (projectsByPlanItem.get(item.id) || []).flatMap((p) => p.stages.flatMap((s) => s.tasks))
+      );
+      const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
+      if (!allDone && isAdmin) {
+        items.push({ id: `plan-${plan.id}`, name: plan.name, type: "План", deadline: plan.deadline });
+      }
+    }
+
+    // Overdue plan items
+    for (const plan of plans) {
+      for (const item of plan.items) {
+        if (item.deadline >= todayStr) continue;
+        const itemProjects = projectsByPlanItem.get(item.id) || [];
+        const allTasks = itemProjects.flatMap((p) => p.stages.flatMap((s) => s.tasks));
+        const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
+        if (!allDone) {
+          const isResponsible = item.responsible === currentName;
+          if (isAdmin || isResponsible) {
+            items.push({ id: `pi-${item.id}`, name: item.name, type: "Пункт плана", deadline: item.deadline });
+          }
+        }
+      }
+    }
+
+    return items;
+  }, [projects, plans, projectsByPlanItem, user]);
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 relative">
+      {/* Overdue notification badge - fixed top right */}
+      {overdueItems.length > 0 && (
+        <div className="fixed top-4 right-4 z-50 bg-red-500 text-white rounded-xl shadow-lg p-3 max-w-xs animate-pulse">
+          <p className="text-xs font-bold mb-1">Просрочено ({overdueItems.length})</p>
+          {overdueItems.slice(0, 4).map((item) => (
+            <p key={item.id} className="text-[10px] truncate">
+              <span className="opacity-70">{item.type}:</span> {item.name}
+            </p>
+          ))}
+          {overdueItems.length > 4 && <p className="text-[10px]">и ещё {overdueItems.length - 4}...</p>}
+        </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Проекты</h1>
             <p className="text-sm text-gray-500 mt-1">
-              {projects.length} проект{projects.length === 1 ? "" : projects.length < 5 ? "а" : "ов"}
-              {plans.length > 0 && ` · ${plans.length} план${plans.length === 1 ? "" : plans.length < 5 ? "а" : "ов"}`}
+              {filteredProjects.length} проект{filteredProjects.length === 1 ? "" : filteredProjects.length < 5 ? "а" : "ов"}
+              {filteredProjects.length !== projects.length && ` из ${projects.length}`}
+              {sortedPlans.length > 0 && ` · ${sortedPlans.length} план${sortedPlans.length === 1 ? "" : sortedPlans.length < 5 ? "а" : "ов"}`}
               {tab === "projects" && " · Перетаскивайте для управления"}
             </p>
           </div>
@@ -552,8 +728,8 @@ export default function ProjectsDashboard() {
         {/* Tab content */}
         {tab === "projects" && (
           <>
-            {/* Action buttons */}
-            <div className="mb-4 flex items-center gap-2">
+            {/* Action buttons + employee filter */}
+            <div className="mb-4 flex items-center gap-2 flex-wrap">
               <button
                 onClick={() => setPlanModal({ plan: null })}
                 className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm"
@@ -566,6 +742,19 @@ export default function ProjectsDashboard() {
               >
                 + Новый проект
               </button>
+              <div className="ml-auto flex items-center gap-1.5">
+                <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Сотрудник:</label>
+                <select
+                  value={filterEmployee}
+                  onChange={(e) => setFilterEmployee(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 max-w-[200px]"
+                >
+                  <option value="__all__">Все сотрудники</option>
+                  {allProjectEmployees.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Plans + Projects with DnD */}
@@ -720,6 +909,14 @@ export default function ProjectsDashboard() {
               </div>
             )}
           </>
+        )}
+
+        {tab === "kanban" && (
+          <KanbanBoard
+            projects={projects}
+            employees={employees}
+            onToggleTaskStatus={handleUpdateProjectTaskStatus}
+          />
         )}
 
         {tab === "all-tasks" && (

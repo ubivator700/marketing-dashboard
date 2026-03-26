@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAppContext } from "@/lib/app-context";
 import { useAuth } from "@/lib/auth-context";
@@ -9,7 +9,7 @@ import { totalExpenses } from "@/lib/expense-utils";
 import { calcProjectCompletion } from "@/lib/project-utils";
 import { statusLabels, statusColors, dayTypeLabels } from "@/lib/data";
 import { generateInstances } from "@/lib/recurring-utils";
-import type { DayType, Employee, Task, StandaloneTask, RecurringTask } from "@/types/dashboard";
+import type { DayType, Employee, Task, StandaloneTask, RecurringTask, DesignOrder } from "@/types/dashboard";
 
 function formatDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -36,10 +36,16 @@ export default function MarketingDashboard() {
     standaloneTasks,
     setStandaloneTasks,
     recurringTasks,
+    designOrders,
+    setDesignOrders,
   } = useAppContext();
 
   const { user } = useAuth();
   const employeeName = user?.employeeName ?? null;
+
+  // Check if user is a designer
+  const currentEmployee = useMemo(() => employees.find((e) => e.name === employeeName), [employees, employeeName]);
+  const isDesigner = currentEmployee?.position === "Дизайнер";
 
   const [tab, setTab] = useState<"today" | "month">("today");
 
@@ -164,6 +170,62 @@ export default function MarketingDashboard() {
       return instances.length > 0;
     });
   }, [recurringTasks, todayKey, employeeName]);
+
+  // ─── Design orders for designer ───
+  const yesterdayKey = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return formatDateKey(d);
+  }, []);
+
+  const todayOrders = useMemo(() => {
+    return designOrders.filter((o) => o.createdAt.slice(0, 10) === todayKey);
+  }, [designOrders, todayKey]);
+
+  const yesterdayOrders = useMemo(() => {
+    return designOrders.filter((o) => o.createdAt.slice(0, 10) === yesterdayKey);
+  }, [designOrders, yesterdayKey]);
+
+  const handleAcceptOrder = useCallback(async (order: DesignOrder) => {
+    // Create standalone task from the order
+    const res = await fetch("/api/standalone-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: order.title,
+        description: order.description + (order.author ? `\n\nЗаказчик: ${order.author}` : ""),
+        assignee: employeeName || "",
+        deadline: todayKey,
+        status: "todo",
+        channelId: null,
+      }),
+    });
+    if (!res.ok) return;
+    const task = await res.json();
+
+    // Update order status
+    await fetch(`/api/design-orders/${order.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "accepted", acceptedBy: employeeName, taskId: task.id }),
+    });
+
+    setDesignOrders((prev) =>
+      prev.map((o) => o.id === order.id ? { ...o, status: "accepted" as const, acceptedBy: employeeName, taskId: task.id } : o)
+    );
+    setStandaloneTasks((prev) => [...prev, task]);
+  }, [employeeName, todayKey, setDesignOrders, setStandaloneTasks]);
+
+  const handleRejectOrder = useCallback(async (order: DesignOrder) => {
+    await fetch(`/api/design-orders/${order.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "rejected", acceptedBy: employeeName }),
+    });
+    setDesignOrders((prev) =>
+      prev.map((o) => o.id === order.id ? { ...o, status: "rejected" as const, acceptedBy: employeeName } : o)
+    );
+  }, [employeeName, setDesignOrders]);
 
   // Employee's expenses today
   const myTodayExpenses = useMemo(() => {
@@ -407,49 +469,75 @@ export default function MarketingDashboard() {
               )}
             </div>
 
-            {/* Panel 2: Лиды за сегодня */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
-              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
-                Лиды за сегодня
-              </p>
-
-              {/* Daily plan completion bar */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                    {todayLeads.length} / {dailyLeadPlan}
-                  </span>
-                  <span className={`text-xs font-bold ${
-                    dailyPct >= 100 ? "text-green-600" : dailyPct >= 50 ? "text-amber-600" : "text-red-500"
-                  }`}>
-                    {dailyPct}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-                  <div
-                    className={`h-2.5 rounded-full transition-all duration-500 ${
-                      dailyPct >= 100 ? "bg-green-500" : dailyPct >= 50 ? "bg-amber-500" : "bg-red-500"
-                    }`}
-                    style={{ width: `${dailyPct}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1">Выполнение дневного плана</p>
+            {/* Panel 2: Лиды/Заказы за сегодня */}
+            {isDesigner ? (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
+                  Заказы за вчера и сегодня
+                </p>
+                {yesterdayOrders.length === 0 && todayOrders.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет заказов</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {todayOrders.length > 0 && (
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase mt-1">Сегодня ({todayOrders.length})</p>
+                    )}
+                    {todayOrders.map((order) => (
+                      <OrderCard key={order.id} order={order} onAccept={handleAcceptOrder} onReject={handleRejectOrder} />
+                    ))}
+                    {yesterdayOrders.length > 0 && (
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase mt-2">Вчера ({yesterdayOrders.length})</p>
+                    )}
+                    {yesterdayOrders.map((order) => (
+                      <OrderCard key={order.id} order={order} onAccept={handleAcceptOrder} onReject={handleRejectOrder} />
+                    ))}
+                  </div>
+                )}
               </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+                <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
+                  Лиды за сегодня
+                </p>
 
-              {/* Leads by channel */}
-              {todayLeadsByChannel.length === 0 ? (
-                <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет лидов за сегодня</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {todayLeadsByChannel.map((item) => (
-                    <div key={item.channelId} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/50">
-                      <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.channelName}</span>
-                      <span className="text-sm font-bold text-indigo-600 flex-shrink-0 ml-2">{item.count}</span>
-                    </div>
-                  ))}
+                {/* Daily plan completion bar */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                      {todayLeads.length} / {dailyLeadPlan}
+                    </span>
+                    <span className={`text-xs font-bold ${
+                      dailyPct >= 100 ? "text-green-600" : dailyPct >= 50 ? "text-amber-600" : "text-red-500"
+                    }`}>
+                      {dailyPct}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                    <div
+                      className={`h-2.5 rounded-full transition-all duration-500 ${
+                        dailyPct >= 100 ? "bg-green-500" : dailyPct >= 50 ? "bg-amber-500" : "bg-red-500"
+                      }`}
+                      style={{ width: `${dailyPct}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1">Выполнение дневного плана</p>
                 </div>
-              )}
-            </div>
+
+                {/* Leads by channel */}
+                {todayLeadsByChannel.length === 0 ? (
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">Нет лидов за сегодня</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {todayLeadsByChannel.map((item) => (
+                      <div key={item.channelId} className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+                        <span className="text-sm text-gray-800 dark:text-gray-200 truncate">{item.channelName}</span>
+                        <span className="text-sm font-bold text-indigo-600 flex-shrink-0 ml-2">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Panel 3: Расходы сотрудника за сегодня */}
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
@@ -482,6 +570,24 @@ export default function MarketingDashboard() {
               )}
             </div>
           </div>
+
+          {/* Full orders list for designers */}
+          {isDesigner && (
+            <div className="mt-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-5">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-3 font-semibold">
+                Все заказы ({designOrders.length})
+              </p>
+              {designOrders.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Нет заказов</p>
+              ) : (
+                <div className="space-y-2">
+                  {designOrders.map((order) => (
+                    <OrderCard key={order.id} order={order} onAccept={handleAcceptOrder} onReject={handleRejectOrder} expanded />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           </div>
         )}
 
@@ -714,6 +820,57 @@ export default function MarketingDashboard() {
 }
 
 // ─── KPI Card with ring chart ─────────────────────────────────────
+
+const ORDER_STATUS_LABELS: Record<string, string> = { new: "Новый", accepted: "Принят", rejected: "Отклонён" };
+const ORDER_STATUS_COLORS: Record<string, string> = {
+  new: "bg-blue-100 text-blue-700",
+  accepted: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+};
+
+function OrderCard({ order, onAccept, onReject, expanded }: { order: DesignOrder; onAccept: (o: DesignOrder) => void; onReject: (o: DesignOrder) => void; expanded?: boolean }) {
+  const date = new Date(order.createdAt);
+  const timeStr = date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const dateStr = date.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+  return (
+    <div className="px-3 py-2.5 rounded-xl bg-gray-50 dark:bg-gray-700/50">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{order.title}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] text-gray-400">{order.author}</span>
+            <span className="text-[10px] text-gray-300">{dateStr} {timeStr}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${ORDER_STATUS_COLORS[order.status]}`}>
+              {ORDER_STATUS_LABELS[order.status]}
+            </span>
+          </div>
+          {expanded && order.description && (
+            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{order.description}</p>
+          )}
+          {expanded && order.attachments.length > 0 && (
+            <div className="flex gap-1 mt-1 flex-wrap">
+              {order.attachments.map((a) => (
+                <a key={a.id} href={a.filePath} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-500 hover:underline bg-indigo-50 px-1.5 py-0.5 rounded">
+                  {a.fileName}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+        {order.status === "new" && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={() => onAccept(order)} className="px-2 py-1 text-[10px] font-medium bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors">
+              Принять
+            </button>
+            <button onClick={() => onReject(order)} className="px-2 py-1 text-[10px] font-medium bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors">
+              Отклонить
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function KpiCard({
   label,

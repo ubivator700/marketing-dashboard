@@ -8,6 +8,7 @@ interface EmployeeRow extends RowDataPacket {
   department_id: string;
   roles: string;
   color: string;
+  position: string | null;
 }
 
 interface ScheduleRow extends RowDataPacket {
@@ -29,7 +30,6 @@ export async function GET() {
     "SELECT * FROM employee_schedule"
   );
 
-  // Group schedule entries by employee name
   const scheduleMap = new Map<
     string,
     { date: string; type: "work" | "dayoff" | "vacation" }[]
@@ -49,8 +49,37 @@ export async function GET() {
     departmentId: e.department_id,
     roles: typeof e.roles === "string" ? JSON.parse(e.roles) : e.roles,
     color: e.color,
+    position: e.position ?? undefined,
     schedule: scheduleMap.get(e.name) ?? [],
   }));
 
   return NextResponse.json(employees);
+}
+
+export async function POST(request: NextRequest) {
+  const { session, error } = await requireAuth();
+  if (error) return error;
+  const writeErr = requireWrite(session!.role, "employees");
+  if (writeErr) return writeErr;
+
+  const body = await request.json();
+  const { name, departmentId, roles, color, position } = body;
+
+  if (!name?.trim()) {
+    return NextResponse.json({ error: "Имя обязательно" }, { status: 400 });
+  }
+
+  await pool.query(
+    "INSERT INTO employees (name, department_id, roles, color, position) VALUES (?, ?, ?, ?, ?)",
+    [name.trim(), departmentId || "management", JSON.stringify(roles || []), color || "#6366f1", position || null]
+  );
+
+  return NextResponse.json({
+    name: name.trim(),
+    departmentId: departmentId || "management",
+    roles: roles || [],
+    color: color || "#6366f1",
+    position: position || undefined,
+    schedule: [],
+  }, { status: 201 });
 }

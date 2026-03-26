@@ -76,6 +76,21 @@ export function deleteStage(projects: Project[], projectId: number, stageId: num
   );
 }
 
+export function reorderStages(
+  projects: Project[],
+  projectId: number,
+  orderedIds: number[]
+): Project[] {
+  return projects.map((p) => {
+    if (p.id !== projectId) return p;
+    const newStages = orderedIds.map((id, idx) => {
+      const stage = p.stages.find((s) => s.id === id)!;
+      return { ...stage, priority: idx + 1 };
+    });
+    return { ...p, stages: newStages };
+  });
+}
+
 // ─── ProjectTask CRUD ─────────────────────────────────────────────
 
 export function addProjectTask(

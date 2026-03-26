@@ -10,11 +10,14 @@ export interface ScheduleDay {
   type: DayType;
 }
 
+export type EmployeePosition = "Маркетолог" | "Дизайнер" | "Контент-менеджер" | "Руководитель" | string;
+
 export interface Employee {
   name: string;
   departmentId: DepartmentId;
   roles: string[];
   color: string;
+  position?: EmployeePosition;
   schedule: ScheduleDay[];
 }
 
@@ -111,6 +114,7 @@ export interface Stage {
   startDate?: string;  // "YYYY-MM-DD"
   deadline: string;
   projectId: number;
+  priority?: number;
   tasks: ProjectTask[];
 }
 
@@ -276,9 +280,34 @@ export interface RecurringTask {
   status: RecurringTaskStatus;
 }
 
+// ─── Design Orders ───────────────────────────────────────────────
+
+export type DesignOrderStatus = "new" | "accepted" | "rejected";
+
+export interface DesignOrderAttachment {
+  id: number;
+  orderId: number;
+  fileName: string;
+  filePath: string;
+  fileType: string;
+  fileSize: number;
+}
+
+export interface DesignOrder {
+  id: number;
+  title: string;
+  description: string;
+  author: string;
+  status: DesignOrderStatus;
+  createdAt: string; // ISO datetime
+  acceptedBy: string | null;
+  taskId: number | null;
+  attachments: DesignOrderAttachment[];
+}
+
 // ─── Navigation ───────────────────────────────────────────────────
 
-export type PageId = "dashboard" | "projects" | "expenses" | "channels" | "leads" | "organization" | "overview" | "content" | "stores" | "products";
+export type PageId = "dashboard" | "projects" | "expenses" | "channels" | "leads" | "organization" | "overview" | "content" | "stores" | "products" | "orders";
 
 export interface PageDefinition {
   id: PageId;

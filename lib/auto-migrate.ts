@@ -300,6 +300,7 @@ export async function runAutoMigrate() {
       `);
     }
     await ensureColumn(conn, "stages", "start_date", "DATE NULL");
+    await ensureColumn(conn, "stages", "priority", "INT NOT NULL DEFAULT 0");
     await ensureColumn(conn, "project_tasks", "start_date", "DATE NULL");
     await ensureColumn(conn, "project_tasks", "due_time", "VARCHAR(5) NULL");
     await ensureColumn(conn, "project_tasks", "duration", "INT NULL");

@@ -75,6 +75,11 @@ export default function PlanItemBlock({
   const deadlineDate = new Date(item.deadline + "T00:00:00");
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
+  // Check if all tasks in all projects under this item are done
+  const allItemTasks = projects.flatMap((p) => p.stages.flatMap((s) => s.tasks));
+  const isItemCompleted = allItemTasks.length > 0 && allItemTasks.every((t) => t.status === "done");
+  const isItemOverdue = !isItemCompleted && daysLeft < 0;
+
   const projectIds = projects.map((p) => `project-${p.id}`);
 
   return (
@@ -84,9 +89,9 @@ export default function PlanItemBlock({
         setDroppableRef(node);
       }}
       style={style}
-      className={`relative rounded-xl border ${color.border} ${color.bg} overflow-hidden transition-all ${
-        isOver ? "ring-2 ring-indigo-400 ring-offset-1" : ""
-      }`}
+      className={`relative rounded-xl border overflow-hidden transition-all ${
+        isItemCompleted ? "border-green-300 bg-green-50" : isItemOverdue ? "border-red-300 bg-red-50" : `${color.border} ${color.bg}`
+      } ${isOver ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`}
     >
       {/* Color stripe on left */}
       <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${color.stripe}`} />
@@ -145,11 +150,11 @@ export default function PlanItemBlock({
               </span>
             )}
             <div className="text-right">
-              <div className={`text-sm font-bold ${daysLeft < 7 ? "text-red-600" : daysLeft < 30 ? "text-amber-600" : color.text}`}>
+              <div className={`text-sm font-bold ${isItemCompleted ? "text-green-600" : isItemOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : color.text}`}>
                 {deadlineLabel}
               </div>
-              <div className={`text-[11px] font-semibold ${daysLeft < 7 ? "text-red-500" : daysLeft < 30 ? "text-amber-500" : color.meta}`}>
-                {daysLeft > 0 ? `${daysLeft} дн.` : "просрочен"}
+              <div className={`text-[11px] font-semibold ${isItemCompleted ? "text-green-500" : isItemOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : color.meta}`}>
+                {isItemCompleted ? "Выполнен" : isItemOverdue ? "просрочен" : `${daysLeft} дн.`}
               </div>
             </div>
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>

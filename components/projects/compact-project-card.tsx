@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import type { Project, Stage, ProjectTask } from "@/types/dashboard";
@@ -70,12 +71,16 @@ export default function CompactProjectCard({
   const allTasks = project.stages.flatMap((s) => s.tasks);
   const doneTasks = allTasks.filter((t) => t.status === "done").length;
   const inProgressTasks = allTasks.filter((t) => t.status === "in_progress").length;
+  const isCompleted = allTasks.length > 0 && doneTasks === allTasks.length;
+  const isOverdue = !isCompleted && daysLeft < 0;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-white rounded-lg border border-gray-200 overflow-hidden group hover:shadow-sm transition-shadow"
+      className={`rounded-lg border overflow-hidden group hover:shadow-sm transition-shadow ${
+        isCompleted ? "bg-green-50 border-green-300" : isOverdue ? "bg-red-50 border-red-300" : "bg-white border-gray-200"
+      }`}
     >
       {/* Main row */}
       <div className="px-3 py-2 flex items-center gap-2">
@@ -161,11 +166,13 @@ export default function CompactProjectCard({
             </span>
           )}
           <div className="text-right">
-            <div className={`text-xs font-bold ${daysLeft < 7 ? "text-red-600" : daysLeft < 30 ? "text-amber-600" : "text-gray-600"}`}>
+            <div className={`text-xs font-bold ${isCompleted ? "text-green-600" : isOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-600"}`}>
               {deadlineLabel}
             </div>
-            <div className={`text-[10px] font-semibold ${daysLeft < 7 ? "text-red-500" : daysLeft < 30 ? "text-amber-500" : "text-gray-400"}`}>
-              {daysLeft > 0 ? `${daysLeft} дн.` : "просрочен"}
+            <div className={`text-[10px] font-semibold ${
+              isCompleted ? "text-green-500" : isOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"
+            }`}>
+              {isCompleted ? "Выполнен" : isOverdue ? "просрочен" : `${daysLeft} дн.`}
             </div>
           </div>
         </div>
@@ -192,6 +199,10 @@ export default function CompactProjectCard({
       {/* Expanded inline view: stages & tasks */}
       {showInline && expanded && project.stages.length > 0 && (
         <div className="border-t border-gray-100 bg-gray-50/50 px-3 py-2">
+          <SortableContext
+            items={project.stages.map((s) => `stage-${s.id}`)}
+            strategy={verticalListSortingStrategy}
+          >
           <div className="space-y-2">
             {project.stages.map((stage) => (
               <StageInlineBlock
@@ -205,6 +216,7 @@ export default function CompactProjectCard({
               />
             ))}
           </div>
+          </SortableContext>
           {onAddStage && (
             <button
               onClick={() => onAddStage(project.id)}
@@ -240,6 +252,21 @@ function StageInlineBlock({
   const doneTasks = stage.tasks.filter((t) => t.status === "done").length;
   const totalTasks = stage.tasks.length;
 
+  const {
+    attributes: stageAttributes,
+    listeners: stageListeners,
+    setNodeRef: stageNodeRef,
+    transform: stageTransform,
+    transition: stageTransition,
+    isDragging: stageIsDragging,
+  } = useSortable({ id: `stage-${stage.id}` });
+
+  const stageStyle = {
+    transform: CSS.Transform.toString(stageTransform),
+    transition: stageTransition,
+    opacity: stageIsDragging ? 0.4 : 1,
+  };
+
   const deadlineLabel = new Date(stage.deadline + "T00:00:00").toLocaleDateString("ru-RU", {
     day: "numeric",
     month: "short",
@@ -247,13 +274,36 @@ function StageInlineBlock({
   const now = new Date();
   const daysLeft = Math.ceil((new Date(stage.deadline + "T00:00:00").getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
+  const stageCompleted = totalTasks > 0 && doneTasks === totalTasks;
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+    <div
+      ref={stageNodeRef}
+      style={stageStyle}
+      className={`rounded-lg border overflow-hidden ${stageCompleted ? "border-green-300 bg-green-50" : "border-gray-200 bg-white"}`}
+    >
       {/* Stage header */}
       <div
-        className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-gray-50 transition-colors group"
+        className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer transition-colors group ${stageCompleted ? "hover:bg-green-100" : "hover:bg-gray-50"}`}
         onClick={() => setStageExpanded(!stageExpanded)}
       >
+        {/* Drag handle */}
+        <button
+          {...stageAttributes}
+          {...stageListeners}
+          className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none"
+          title="Перетащить"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+            <circle cx="5" cy="3" r="1.5" />
+            <circle cx="11" cy="3" r="1.5" />
+            <circle cx="5" cy="8" r="1.5" />
+            <circle cx="11" cy="8" r="1.5" />
+            <circle cx="5" cy="13" r="1.5" />
+            <circle cx="11" cy="13" r="1.5" />
+          </svg>
+        </button>
         {totalTasks > 0 && (
           <svg
             className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${stageExpanded ? "rotate-0" : "-rotate-90"}`}
@@ -269,11 +319,13 @@ function StageInlineBlock({
         <span className="text-[11px] font-semibold text-gray-700 flex-1 truncate">{stage.name}</span>
         <span className="text-[10px] text-gray-400">{doneTasks}/{totalTasks}</span>
         <div className="text-right flex-shrink-0">
-          <span className={`text-[11px] font-bold ${daysLeft < 7 ? "text-red-600" : daysLeft < 30 ? "text-amber-600" : "text-gray-600"}`}>
+          <span className={`text-[11px] font-bold ${stageCompleted ? "text-green-600" : daysLeft < 0 ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-600"}`}>
             {deadlineLabel}
           </span>
-          <span className={`text-[10px] font-semibold ml-1 ${daysLeft < 7 ? "text-red-500" : daysLeft < 30 ? "text-amber-500" : "text-gray-400"}`}>
-            {daysLeft > 0 ? `${daysLeft}д` : "!"}
+          <span className={`text-[10px] font-semibold ml-1 ${
+            stageCompleted ? "text-green-500" : daysLeft < 0 ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"
+          }`}>
+            {stageCompleted ? "✓" : daysLeft < 0 ? "!" : `${daysLeft}д`}
           </span>
         </div>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>

@@ -11,7 +11,7 @@ export async function GET() {
     "SELECT * FROM projects ORDER BY priority"
   );
   const [stageRows] = await pool.query<RowDataPacket[]>(
-    "SELECT * FROM stages ORDER BY id"
+    "SELECT * FROM stages ORDER BY priority, id"
   );
   const [taskRows] = await pool.query<RowDataPacket[]>(
     "SELECT * FROM project_tasks ORDER BY id"

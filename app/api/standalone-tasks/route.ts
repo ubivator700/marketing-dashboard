@@ -48,39 +48,48 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
 
-  let insertId: number;
-  if (body.id) {
-    await pool.query<ResultSetHeader>(
-      "INSERT INTO standalone_tasks (id, name, description, assignee, deadline, due_time, duration, status, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        body.id,
-        body.name,
-        body.description ?? null,
-        body.assignee ?? "",
-        body.deadline ?? "",
-        body.dueTime ?? null,
-        body.duration ?? null,
-        body.status ?? "todo",
-        body.channelId ?? null,
-      ]
-    );
-    insertId = body.id;
-  } else {
-    const [result] = await pool.query<ResultSetHeader>(
-      "INSERT INTO standalone_tasks (name, description, assignee, deadline, due_time, duration, status, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        body.name,
-        body.description ?? null,
-        body.assignee ?? "",
-        body.deadline ?? "",
-        body.dueTime ?? null,
-        body.duration ?? null,
-        body.status ?? "todo",
-        body.channelId ?? null,
-      ]
-    );
-    insertId = result.insertId;
-  }
+  try {
+    let insertId: number;
+    // Validate deadline is a proper date string
+    const deadline = body.deadline && body.deadline !== "" ? body.deadline : new Date().toISOString().slice(0, 10);
 
-  return NextResponse.json({ ...body, id: insertId }, { status: 201 });
+    if (body.id) {
+      await pool.query<ResultSetHeader>(
+        "INSERT INTO standalone_tasks (id, name, description, assignee, deadline, due_time, duration, status, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          body.id,
+          body.name ?? "",
+          body.description ?? null,
+          body.assignee ?? "",
+          deadline,
+          body.dueTime ?? null,
+          body.duration ?? null,
+          body.status ?? "todo",
+          body.channelId ?? null,
+        ]
+      );
+      insertId = body.id;
+    } else {
+      const [result] = await pool.query<ResultSetHeader>(
+        "INSERT INTO standalone_tasks (name, description, assignee, deadline, due_time, duration, status, channel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          body.name ?? "",
+          body.description ?? null,
+          body.assignee ?? "",
+          deadline,
+          body.dueTime ?? null,
+          body.duration ?? null,
+          body.status ?? "todo",
+          body.channelId ?? null,
+        ]
+      );
+      insertId = result.insertId;
+    }
+
+    return NextResponse.json({ ...body, id: insertId }, { status: 201 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("POST /api/standalone-tasks error:", message, "body:", JSON.stringify(body));
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

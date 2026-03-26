@@ -42,7 +42,7 @@ export default function PlanBlock({
   onEditTask,
   onAddTask,
 }: PlanBlockProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const {
     attributes,
@@ -79,11 +79,20 @@ export default function PlanBlock({
   const deadlineDate = new Date(plan.deadline + "T00:00:00");
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
+  // Check if all tasks in all projects under this plan are done
+  const allPlanTasks = plan.items.flatMap((item) =>
+    (projectsByItem.get(item.id) || []).flatMap((p) => p.stages.flatMap((s) => s.tasks))
+  );
+  const isPlanCompleted = allPlanTasks.length > 0 && allPlanTasks.every((t) => t.status === "done");
+  const isPlanOverdue = !isPlanCompleted && daysLeft < 0;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow"
+      className={`rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-shadow ${
+        isPlanCompleted ? "bg-green-50 border-green-200" : isPlanOverdue ? "bg-red-50 border-red-200" : "bg-white border-gray-100"
+      }`}
     >
       {/* Plan header */}
       <div
@@ -140,11 +149,11 @@ export default function PlanBlock({
             {/* Right side: deadline + responsible — large and prominent */}
             <div className="flex items-center gap-3 flex-shrink-0">
               <div className="text-right">
-                <div className={`text-sm font-bold ${daysLeft < 7 ? "text-red-600" : daysLeft < 30 ? "text-amber-600" : "text-gray-700"}`}>
+                <div className={`text-sm font-bold ${isPlanCompleted ? "text-green-600" : isPlanOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-700"}`}>
                   {deadlineLabel}
                 </div>
-                <div className={`text-xs font-semibold ${daysLeft < 7 ? "text-red-500" : daysLeft < 30 ? "text-amber-500" : "text-gray-400"}`}>
-                  {daysLeft > 0 ? `${daysLeft} дн.` : "просрочен"}
+                <div className={`text-xs font-semibold ${isPlanCompleted ? "text-green-500" : isPlanOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"}`}>
+                  {isPlanCompleted ? "Выполнен" : isPlanOverdue ? "просрочен" : `${daysLeft} дн.`}
                 </div>
               </div>
               <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
