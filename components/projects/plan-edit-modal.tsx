@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Plan } from "@/types/dashboard";
+import { useAuth } from "@/lib/auth-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 interface PlanEditModalProps {
@@ -12,10 +13,13 @@ interface PlanEditModalProps {
 }
 
 export default function PlanEditModal({ plan, onSave, onDelete, onClose }: PlanEditModalProps) {
+  const { user } = useAuth();
   const isNew = !plan;
+  const isAdmin = user?.role === "admin";
   const [name, setName] = useState(plan?.name ?? "");
   const [startDate, setStartDate] = useState(plan?.startDate ?? "");
   const [deadline, setDeadline] = useState(plan?.deadline ?? new Date().toISOString().slice(0, 10));
+  const [cancelled, setCancelled] = useState(plan?.cancelled ?? false);
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -25,6 +29,7 @@ export default function PlanEditModal({ plan, onSave, onDelete, onClose }: PlanE
       startDate: startDate || undefined,
       deadline,
       sortOrder: plan?.sortOrder ?? 0,
+      cancelled,
       items: plan?.items ?? [],
     });
   };
@@ -63,6 +68,17 @@ export default function PlanEditModal({ plan, onSave, onDelete, onClose }: PlanE
             />
           </div>
         </div>
+
+        {/* Cancelled toggle — admin only, edit only */}
+        {!isNew && isAdmin && (
+          <div className="flex items-center gap-2">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={cancelled} onChange={(e) => setCancelled(e.target.checked)} className="sr-only peer" />
+              <div className="w-9 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500" />
+            </label>
+            <span className="text-xs font-medium text-gray-600">План отменён</span>
+          </div>
+        )}
 
         <div className="flex items-center justify-between pt-2">
           {onDelete && plan ? (

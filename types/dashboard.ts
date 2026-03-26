@@ -104,6 +104,7 @@ export interface ProjectTask {
   status: ProjectTaskStatus;
   stageId: number;
   projectId: number;
+  cancelled?: boolean;
 }
 
 export interface Stage {
@@ -115,6 +116,7 @@ export interface Stage {
   deadline: string;
   projectId: number;
   priority?: number;
+  cancelled?: boolean;
   tasks: ProjectTask[];
 }
 
@@ -128,6 +130,7 @@ export interface Project {
   priority: number;
   responsible?: string;
   planItemId: number | null;
+  cancelled?: boolean;
   stages: Stage[];
 }
 
@@ -143,6 +146,7 @@ export interface PlanItem {
   color: string;
   sortOrder: number;
   planId: number;
+  cancelled?: boolean;
 }
 
 export interface Plan {
@@ -151,6 +155,7 @@ export interface Plan {
   startDate?: string;
   deadline: string;
   sortOrder: number;
+  cancelled?: boolean;
   items: PlanItem[];
 }
 

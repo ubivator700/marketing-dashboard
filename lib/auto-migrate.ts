@@ -258,6 +258,9 @@ export async function runAutoMigrate() {
     await ensureColumn(conn, "plans", "start_date", "DATE NULL");
     await ensureColumn(conn, "plan_items", "start_date", "DATE NULL");
     await ensureColumn(conn, "projects", "start_date", "DATE NULL");
+    await ensureColumn(conn, "projects", "cancelled", "TINYINT(1) NOT NULL DEFAULT 0");
+    await ensureColumn(conn, "plans", "cancelled", "TINYINT(1) NOT NULL DEFAULT 0");
+    await ensureColumn(conn, "plan_items", "cancelled", "TINYINT(1) NOT NULL DEFAULT 0");
 
     // ───────────────────────────────────────────────────────────
     //  STAGES
@@ -301,7 +304,9 @@ export async function runAutoMigrate() {
     }
     await ensureColumn(conn, "stages", "start_date", "DATE NULL");
     await ensureColumn(conn, "stages", "priority", "INT NOT NULL DEFAULT 0");
+    await ensureColumn(conn, "stages", "cancelled", "TINYINT(1) NOT NULL DEFAULT 0");
     await ensureColumn(conn, "project_tasks", "start_date", "DATE NULL");
+    await ensureColumn(conn, "project_tasks", "cancelled", "TINYINT(1) NOT NULL DEFAULT 0");
     await ensureColumn(conn, "project_tasks", "due_time", "VARCHAR(5) NULL");
     await ensureColumn(conn, "project_tasks", "duration", "INT NULL");
 

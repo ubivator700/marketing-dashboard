@@ -75,10 +75,12 @@ export default function PlanItemBlock({
   const deadlineDate = new Date(item.deadline + "T00:00:00");
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  // Check if all tasks in all projects under this item are done
-  const allItemTasks = projects.flatMap((p) => p.stages.flatMap((s) => s.tasks));
-  const isItemCompleted = allItemTasks.length > 0 && allItemTasks.every((t) => t.status === "done");
-  const isItemOverdue = !isItemCompleted && daysLeft < 0;
+  // Check if all tasks in all non-cancelled projects under this item are done
+  const isItemCancelled = !!item.cancelled;
+  const activeProjects = projects.filter((p) => !p.cancelled);
+  const allItemTasks = activeProjects.flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)));
+  const isItemCompleted = !isItemCancelled && allItemTasks.length > 0 && allItemTasks.every((t) => t.status === "done");
+  const isItemOverdue = !isItemCancelled && !isItemCompleted && daysLeft < 0;
 
   const projectIds = projects.map((p) => `project-${p.id}`);
 
@@ -90,7 +92,7 @@ export default function PlanItemBlock({
       }}
       style={style}
       className={`relative rounded-xl border overflow-hidden transition-all ${
-        isItemCompleted ? "border-green-300 bg-green-50" : isItemOverdue ? "border-red-300 bg-red-50" : `${color.border} ${color.bg}`
+        isItemCancelled ? "border-gray-300 bg-gray-100 opacity-60" : isItemCompleted ? "border-green-300 bg-green-50" : isItemOverdue ? "border-red-300 bg-red-50" : `${color.border} ${color.bg}`
       } ${isOver ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`}
     >
       {/* Color stripe on left */}
@@ -136,7 +138,7 @@ export default function PlanItemBlock({
               </svg>
             </button>
             <div className="min-w-0">
-              <h4 className={`text-sm font-bold ${color.text} leading-tight`}>{item.name}</h4>
+              <h4 className={`text-sm font-bold leading-tight ${isItemCancelled ? "text-gray-400 line-through" : color.text}`}>{item.name}</h4>
               {item.result && (
                 <p className={`text-[11px] ${color.meta} mt-0.5 line-clamp-2`}>{item.result}</p>
               )}
@@ -150,11 +152,11 @@ export default function PlanItemBlock({
               </span>
             )}
             <div className="text-right">
-              <div className={`text-sm font-bold ${isItemCompleted ? "text-green-600" : isItemOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : color.text}`}>
+              <div className={`text-sm font-bold ${isItemCancelled ? "text-gray-400" : isItemCompleted ? "text-green-600" : isItemOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : color.text}`}>
                 {deadlineLabel}
               </div>
-              <div className={`text-[11px] font-semibold ${isItemCompleted ? "text-green-500" : isItemOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : color.meta}`}>
-                {isItemCompleted ? "Выполнен" : isItemOverdue ? "просрочен" : `${daysLeft} дн.`}
+              <div className={`text-[11px] font-semibold ${isItemCancelled ? "text-gray-400" : isItemCompleted ? "text-green-500" : isItemOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : color.meta}`}>
+                {isItemCancelled ? "Отменён" : isItemCompleted ? "Выполнен" : isItemOverdue ? "просрочен" : `${daysLeft} дн.`}
               </div>
             </div>
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>

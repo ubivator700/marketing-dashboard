@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Project } from "@/types/dashboard";
 import { useAppContext } from "@/lib/app-context";
+import { useAuth } from "@/lib/auth-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 interface ProjectEditModalProps {
@@ -19,13 +20,16 @@ export default function ProjectEditModal({
   onClose,
 }: ProjectEditModalProps) {
   const { employees } = useAppContext();
+  const { user } = useAuth();
   const isCreate = project === null;
+  const isAdmin = user?.role === "admin";
   const [name, setName] = useState(project?.name ?? "");
   const [goal, setGoal] = useState(project?.goal ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
   const [startDate, setStartDate] = useState(project?.startDate ?? "");
   const [deadline, setDeadline] = useState(project?.deadline ?? "");
   const [responsible, setResponsible] = useState(project?.responsible ?? "");
+  const [cancelled, setCancelled] = useState(project?.cancelled ?? false);
   const [error, setError] = useState("");
 
   const handleSave = () => {
@@ -41,6 +45,7 @@ export default function ProjectEditModal({
       priority: project?.priority ?? Date.now(),
       responsible: responsible || undefined,
       planItemId: project?.planItemId ?? null,
+      cancelled,
       stages: project?.stages ?? [],
     });
   };
@@ -91,6 +96,21 @@ export default function ProjectEditModal({
             </select>
           </div>
         </div>
+        {/* Cancelled toggle — admin only, edit only */}
+        {!isCreate && isAdmin && (
+          <div className="mt-3 flex items-center gap-2">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cancelled}
+                onChange={(e) => setCancelled(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500" />
+            </label>
+            <span className="text-xs font-medium text-gray-600">Проект отменён</span>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 mt-6">

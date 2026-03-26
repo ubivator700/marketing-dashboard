@@ -79,19 +79,20 @@ export default function PlanBlock({
   const deadlineDate = new Date(plan.deadline + "T00:00:00");
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  // Check if all tasks in all projects under this plan are done
-  const allPlanTasks = plan.items.flatMap((item) =>
-    (projectsByItem.get(item.id) || []).flatMap((p) => p.stages.flatMap((s) => s.tasks))
+  // Check if all tasks in all non-cancelled projects under this plan are done
+  const allPlanTasks = plan.items.filter((i) => !i.cancelled).flatMap((item) =>
+    (projectsByItem.get(item.id) || []).filter((p) => !p.cancelled).flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)))
   );
-  const isPlanCompleted = allPlanTasks.length > 0 && allPlanTasks.every((t) => t.status === "done");
-  const isPlanOverdue = !isPlanCompleted && daysLeft < 0;
+  const isPlanCancelled = !!plan.cancelled;
+  const isPlanCompleted = !isPlanCancelled && allPlanTasks.length > 0 && allPlanTasks.every((t) => t.status === "done");
+  const isPlanOverdue = !isPlanCancelled && !isPlanCompleted && daysLeft < 0;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`rounded-xl shadow-sm border overflow-hidden hover:shadow-md transition-shadow ${
-        isPlanCompleted ? "bg-green-50 border-green-200" : isPlanOverdue ? "bg-red-50 border-red-200" : "bg-white border-gray-100"
+        isPlanCancelled ? "bg-gray-100 border-gray-300 opacity-60" : isPlanCompleted ? "bg-green-50 border-green-200" : isPlanOverdue ? "bg-red-50 border-red-200" : "bg-white border-gray-100"
       }`}
     >
       {/* Plan header */}
@@ -136,8 +137,8 @@ export default function PlanBlock({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <h3 className="text-base font-bold text-gray-900 leading-tight flex items-center gap-2">
-                <span className="text-indigo-500">📋</span>
+              <h3 className={`text-base font-bold leading-tight flex items-center gap-2 ${isPlanCancelled ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                <span className={isPlanCancelled ? "text-gray-400" : "text-indigo-500"}>📋</span>
                 {plan.name}
               </h3>
               <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
@@ -149,11 +150,11 @@ export default function PlanBlock({
             {/* Right side: deadline + responsible — large and prominent */}
             <div className="flex items-center gap-3 flex-shrink-0">
               <div className="text-right">
-                <div className={`text-sm font-bold ${isPlanCompleted ? "text-green-600" : isPlanOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-700"}`}>
+                <div className={`text-sm font-bold ${isPlanCancelled ? "text-gray-400" : isPlanCompleted ? "text-green-600" : isPlanOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-700"}`}>
                   {deadlineLabel}
                 </div>
-                <div className={`text-xs font-semibold ${isPlanCompleted ? "text-green-500" : isPlanOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"}`}>
-                  {isPlanCompleted ? "Выполнен" : isPlanOverdue ? "просрочен" : `${daysLeft} дн.`}
+                <div className={`text-xs font-semibold ${isPlanCancelled ? "text-gray-400" : isPlanCompleted ? "text-green-500" : isPlanOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"}`}>
+                  {isPlanCancelled ? "Отменён" : isPlanCompleted ? "Выполнен" : isPlanOverdue ? "просрочен" : `${daysLeft} дн.`}
                 </div>
               </div>
               <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>

@@ -640,9 +640,10 @@ export default function ProjectsDashboard() {
     const currentName = user?.employeeName;
     const items: { id: string; name: string; type: string; deadline: string }[] = [];
 
-    // Overdue projects
+    // Overdue projects (skip cancelled projects/stages/tasks)
     for (const p of projects) {
-      const allTasks = p.stages.flatMap((s) => s.tasks);
+      if (p.cancelled) continue;
+      const allTasks = p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled));
       const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
       if (allDone || p.deadline >= todayStr) continue;
       if (isAdmin || p.responsible === currentName) {
@@ -650,11 +651,12 @@ export default function ProjectsDashboard() {
       }
     }
 
-    // Overdue plans
+    // Overdue plans (skip cancelled plans and exclude cancelled projects/stages/tasks)
     for (const plan of plans) {
+      if (plan.cancelled) continue;
       if (plan.deadline >= todayStr) continue;
-      const allTasks = plan.items.flatMap((item) =>
-        (projectsByPlanItem.get(item.id) || []).flatMap((p) => p.stages.flatMap((s) => s.tasks))
+      const allTasks = plan.items.filter((i) => !i.cancelled).flatMap((item) =>
+        (projectsByPlanItem.get(item.id) || []).filter((p) => !p.cancelled).flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)))
       );
       const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
       if (!allDone && isAdmin) {
@@ -662,12 +664,14 @@ export default function ProjectsDashboard() {
       }
     }
 
-    // Overdue plan items
+    // Overdue plan items (skip cancelled plans/items and exclude cancelled projects/stages/tasks)
     for (const plan of plans) {
+      if (plan.cancelled) continue;
       for (const item of plan.items) {
+        if (item.cancelled) continue;
         if (item.deadline >= todayStr) continue;
-        const itemProjects = projectsByPlanItem.get(item.id) || [];
-        const allTasks = itemProjects.flatMap((p) => p.stages.flatMap((s) => s.tasks));
+        const itemProjects = (projectsByPlanItem.get(item.id) || []).filter((p) => !p.cancelled);
+        const allTasks = itemProjects.flatMap((p) => p.stages.filter((s) => !s.cancelled).flatMap((s) => s.tasks.filter((t) => !t.cancelled)));
         const allDone = allTasks.length > 0 && allTasks.every((t) => t.status === "done");
         if (!allDone) {
           const isResponsible = item.responsible === currentName;

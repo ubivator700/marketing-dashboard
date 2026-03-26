@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PlanItem, Employee } from "@/types/dashboard";
+import { useAuth } from "@/lib/auth-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 const PLAN_ITEM_COLORS = [
@@ -25,13 +26,16 @@ interface PlanItemEditModalProps {
 }
 
 export default function PlanItemEditModal({ item, planId, employees, onSave, onDelete, onClose }: PlanItemEditModalProps) {
+  const { user } = useAuth();
   const isNew = !item;
+  const isAdmin = user?.role === "admin";
   const [name, setName] = useState(item?.name ?? "");
   const [result, setResult] = useState(item?.result ?? "");
   const [startDate, setStartDate] = useState(item?.startDate ?? "");
   const [deadline, setDeadline] = useState(item?.deadline ?? new Date().toISOString().slice(0, 10));
   const [responsible, setResponsible] = useState(item?.responsible ?? "");
   const [color, setColor] = useState(item?.color ?? "blue");
+  const [cancelled, setCancelled] = useState(item?.cancelled ?? false);
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -45,6 +49,7 @@ export default function PlanItemEditModal({ item, planId, employees, onSave, onD
       color,
       sortOrder: item?.sortOrder ?? 0,
       planId,
+      cancelled,
     });
   };
 
@@ -127,6 +132,17 @@ export default function PlanItemEditModal({ item, planId, employees, onSave, onD
             ))}
           </div>
         </div>
+
+        {/* Cancelled toggle — admin only, edit only */}
+        {!isNew && isAdmin && (
+          <div className="flex items-center gap-2">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" checked={cancelled} onChange={(e) => setCancelled(e.target.checked)} className="sr-only peer" />
+              <div className="w-9 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500" />
+            </label>
+            <span className="text-xs font-medium text-gray-600">Пункт отменён</span>
+          </div>
+        )}
 
         <div className="flex items-center justify-between pt-2">
           {onDelete && item ? (

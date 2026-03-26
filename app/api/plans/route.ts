@@ -26,6 +26,7 @@ export async function GET() {
       color: i.color,
       sortOrder: i.sort_order,
       planId: i.plan_id,
+      cancelled: !!i.cancelled,
     };
     if (!itemsByPlan.has(i.plan_id)) itemsByPlan.set(i.plan_id, []);
     itemsByPlan.get(i.plan_id)!.push(item);
@@ -37,6 +38,7 @@ export async function GET() {
     startDate: formatDate(p.start_date),
     deadline: formatDate(p.deadline),
     sortOrder: p.sort_order,
+    cancelled: !!p.cancelled,
     items: itemsByPlan.get(p.id) || [],
   }));
 
@@ -58,14 +60,14 @@ export async function POST(request: NextRequest) {
     let planId: number;
     if (body.id) {
       await conn.execute(
-        "INSERT INTO plans (id, name, start_date, deadline, sort_order) VALUES (?, ?, ?, ?, ?)",
-        [body.id, body.name, body.startDate || null, body.deadline, body.sortOrder ?? 0]
+        "INSERT INTO plans (id, name, start_date, deadline, sort_order, cancelled) VALUES (?, ?, ?, ?, ?, ?)",
+        [body.id, body.name, body.startDate || null, body.deadline, body.sortOrder ?? 0, body.cancelled ? 1 : 0]
       );
       planId = body.id;
     } else {
       const [result] = await conn.execute(
-        "INSERT INTO plans (name, start_date, deadline, sort_order) VALUES (?, ?, ?, ?)",
-        [body.name, body.startDate || null, body.deadline, body.sortOrder ?? 0]
+        "INSERT INTO plans (name, start_date, deadline, sort_order, cancelled) VALUES (?, ?, ?, ?, ?)",
+        [body.name, body.startDate || null, body.deadline, body.sortOrder ?? 0, body.cancelled ? 1 : 0]
       );
       planId = (result as any).insertId;
     }
@@ -76,14 +78,14 @@ export async function POST(request: NextRequest) {
       let itemId: number;
       if (item.id) {
         await conn.execute(
-          "INSERT INTO plan_items (id, name, result, start_date, deadline, responsible, color, sort_order, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [item.id, item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId]
+          "INSERT INTO plan_items (id, name, result, start_date, deadline, responsible, color, sort_order, plan_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [item.id, item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId, item.cancelled ? 1 : 0]
         );
         itemId = item.id;
       } else {
         const [itemResult] = await conn.execute(
-          "INSERT INTO plan_items (name, result, start_date, deadline, responsible, color, sort_order, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId]
+          "INSERT INTO plan_items (name, result, start_date, deadline, responsible, color, sort_order, plan_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId, item.cancelled ? 1 : 0]
         );
         itemId = (itemResult as any).insertId;
       }
@@ -98,6 +100,7 @@ export async function POST(request: NextRequest) {
         color: item.color ?? "blue",
         sortOrder: item.sortOrder ?? 0,
         planId,
+        cancelled: !!item.cancelled,
       });
     }
 
@@ -109,6 +112,7 @@ export async function POST(request: NextRequest) {
       startDate: body.startDate || null,
       deadline: body.deadline,
       sortOrder: body.sortOrder ?? 0,
+      cancelled: !!body.cancelled,
       items,
     }, { status: 201 });
   } catch (err) {

@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ProjectTask, ProjectTaskStatus } from "@/types/dashboard";
 import { projectTaskStatusLabels } from "@/lib/projects-data";
 import { teamMembers } from "@/lib/data";
+import { useAuth } from "@/lib/auth-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 interface ProjectTaskEditModalProps {
@@ -39,13 +40,16 @@ export default function ProjectTaskEditModal({
   onDelete,
   onClose,
 }: ProjectTaskEditModalProps) {
+  const { user } = useAuth();
   const isCreate = task === null;
+  const isAdmin = user?.role === "admin";
   const [name, setName] = useState(task?.name ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [assignee, setAssignee] = useState(task?.assignee ?? teamMembers[0]?.name ?? "");
   const [startDate, setStartDate] = useState(task?.startDate ?? "");
   const [deadline, setDeadline] = useState(task?.deadline ?? "");
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? "todo");
+  const [cancelled, setCancelled] = useState(task?.cancelled ?? false);
   const [error, setError] = useState("");
 
   const handleSave = () => {
@@ -63,6 +67,7 @@ export default function ProjectTaskEditModal({
       status,
       stageId,
       projectId,
+      cancelled,
     });
   };
 
@@ -125,6 +130,17 @@ export default function ProjectTaskEditModal({
           <p className="text-xs text-gray-400">Длительность: {dur}</p>
         )}
       </div>
+
+      {/* Cancelled toggle — admin only, edit only */}
+      {!isCreate && isAdmin && (
+        <div className="flex items-center gap-2 mt-3">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={cancelled} onChange={(e) => setCancelled(e.target.checked)} className="sr-only peer" />
+            <div className="w-9 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500" />
+          </label>
+          <span className="text-xs font-medium text-gray-600">Задача отменена</span>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mt-6">
         <button onClick={handleSave} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">

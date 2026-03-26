@@ -32,6 +32,7 @@ async function fetchProject(projectId: number) {
       status: t.status,
       stageId: t.stage_id,
       projectId: t.project_id,
+      cancelled: !!t.cancelled,
     };
     if (t.start_date) task.startDate = formatDate(t.start_date);
     if (t.due_time) task.dueTime = t.due_time;
@@ -48,6 +49,7 @@ async function fetchProject(projectId: number) {
       description: s.description,
       deadline: formatDate(s.deadline),
       projectId: s.project_id,
+      cancelled: !!s.cancelled,
       tasks: tasksByStage.get(s.id) || [],
     };
     if (s.start_date) stage.startDate = formatDate(s.start_date);
@@ -64,6 +66,7 @@ async function fetchProject(projectId: number) {
     priority: p.priority,
     responsible: p.responsible,
     planItemId: p.plan_item_id ?? null,
+    cancelled: !!p.cancelled,
     stages,
   };
 }
@@ -106,8 +109,8 @@ export async function PUT(
 
     // 1. Update the project itself
     await conn.execute(
-      "UPDATE projects SET name=?, goal=?, description=?, start_date=?, deadline=?, priority=?, responsible=?, plan_item_id=? WHERE id=?",
-      [body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null, projectId]
+      "UPDATE projects SET name=?, goal=?, description=?, start_date=?, deadline=?, priority=?, responsible=?, plan_item_id=?, cancelled=? WHERE id=?",
+      [body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null, body.cancelled ? 1 : 0, projectId]
     );
 
     // 2. Get existing stage IDs for THIS project
@@ -136,8 +139,8 @@ export async function PUT(
       if (stage.id && existingStageIds.has(stage.id)) {
         // Update existing stage (already belongs to this project)
         await conn.execute(
-          "UPDATE stages SET name=?, result=?, description=?, start_date=?, deadline=?, priority=? WHERE id=? AND project_id=?",
-          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stagePriority, stage.id, projectId]
+          "UPDATE stages SET name=?, result=?, description=?, start_date=?, deadline=?, priority=?, cancelled=? WHERE id=? AND project_id=?",
+          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stagePriority, stage.cancelled ? 1 : 0, stage.id, projectId]
         );
         stageId = stage.id;
       } else if (stage.id) {
@@ -149,8 +152,8 @@ export async function PUT(
         if (globalCheck.length > 0) {
           // Move stage from another project to this one
           await conn.execute(
-            "UPDATE stages SET project_id=?, name=?, result=?, description=?, start_date=?, deadline=?, priority=? WHERE id=?",
-            [projectId, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stagePriority, stage.id]
+            "UPDATE stages SET project_id=?, name=?, result=?, description=?, start_date=?, deadline=?, priority=?, cancelled=? WHERE id=?",
+            [projectId, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, stagePriority, stage.cancelled ? 1 : 0, stage.id]
           );
           // Also update all tasks' project_id
           await conn.execute(
@@ -161,16 +164,16 @@ export async function PUT(
         } else {
           // Insert new stage with client-provided id
           await conn.execute(
-            "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stagePriority]
+            "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id, priority, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stagePriority, stage.cancelled ? 1 : 0]
           );
           stageId = stage.id;
         }
       } else {
         // Insert new stage with auto-increment
         const [result] = await conn.execute(
-          "INSERT INTO stages (name, result, description, start_date, deadline, project_id, priority) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stagePriority]
+          "INSERT INTO stages (name, result, description, start_date, deadline, project_id, priority, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stagePriority, stage.cancelled ? 1 : 0]
         );
         stageId = (result as any).insertId;
       }
@@ -196,8 +199,8 @@ export async function PUT(
       for (const task of stage.tasks || []) {
         if (task.id && existingTaskIds.has(task.id)) {
           await conn.execute(
-            "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=?, project_id=? WHERE id=?",
-            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, projectId, task.id]
+            "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=?, project_id=?, cancelled=? WHERE id=?",
+            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, projectId, task.cancelled ? 1 : 0, task.id]
           );
         } else if (task.id) {
           // Check if task exists globally (moved with stage)
@@ -207,20 +210,20 @@ export async function PUT(
           );
           if (taskCheck.length > 0) {
             await conn.execute(
-              "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=?, stage_id=?, project_id=? WHERE id=?",
-              [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.id]
+              "UPDATE project_tasks SET name=?, description=?, assignee=?, start_date=?, deadline=?, due_time=?, duration=?, status=?, stage_id=?, project_id=?, cancelled=? WHERE id=?",
+              [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.cancelled ? 1 : 0, task.id]
             );
           } else {
             await conn.execute(
-              "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-              [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+              "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+              [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.cancelled ? 1 : 0]
             );
           }
         } else {
           // Insert new task with auto-increment
           await conn.execute(
-            "INSERT INTO project_tasks (name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+            "INSERT INTO project_tasks (name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.cancelled ? 1 : 0]
           );
         }
       }

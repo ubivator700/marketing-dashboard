@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Stage } from "@/types/dashboard";
+import { useAuth } from "@/lib/auth-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 interface StageEditModalProps {
@@ -34,12 +35,15 @@ export default function StageEditModal({
   onDelete,
   onClose,
 }: StageEditModalProps) {
+  const { user } = useAuth();
   const isCreate = stage === null;
+  const isAdmin = user?.role === "admin";
   const [name, setName] = useState(stage?.name ?? "");
   const [result, setResult] = useState(stage?.result ?? "");
   const [description, setDescription] = useState(stage?.description ?? "");
   const [startDate, setStartDate] = useState(stage?.startDate ?? "");
   const [deadline, setDeadline] = useState(stage?.deadline ?? "");
+  const [cancelled, setCancelled] = useState(stage?.cancelled ?? false);
   const [error, setError] = useState("");
 
   const handleSave = () => {
@@ -53,6 +57,7 @@ export default function StageEditModal({
       startDate: startDate || undefined,
       deadline,
       projectId,
+      cancelled,
       tasks: stage?.tasks ?? [],
     });
   };
@@ -100,6 +105,17 @@ export default function StageEditModal({
           <p className="text-xs text-gray-400">Длительность: {dur}</p>
         )}
       </div>
+
+      {/* Cancelled toggle — admin only, edit only */}
+      {!isCreate && isAdmin && (
+        <div className="flex items-center gap-2 mt-3">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" checked={cancelled} onChange={(e) => setCancelled(e.target.checked)} className="sr-only peer" />
+            <div className="w-9 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-500" />
+          </label>
+          <span className="text-xs font-medium text-gray-600">Этап отменён</span>
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mt-6">
         <button onClick={handleSave} className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">

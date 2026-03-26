@@ -28,6 +28,7 @@ export async function GET() {
       status: t.status,
       stageId: t.stage_id,
       projectId: t.project_id,
+      cancelled: !!t.cancelled,
     };
     if (t.start_date) task.startDate = formatDate(t.start_date);
     if (t.due_time) task.dueTime = t.due_time;
@@ -45,6 +46,7 @@ export async function GET() {
       description: s.description,
       deadline: formatDate(s.deadline),
       projectId: s.project_id,
+      cancelled: !!s.cancelled,
       tasks: tasksByStage.get(s.id) || [],
     };
     if (s.start_date) stage.startDate = formatDate(s.start_date);
@@ -62,6 +64,7 @@ export async function GET() {
     priority: p.priority,
     responsible: p.responsible,
     planItemId: p.plan_item_id ?? null,
+    cancelled: !!p.cancelled,
     stages: stagesByProject.get(p.id) || [],
   }));
 
@@ -84,14 +87,14 @@ export async function POST(request: NextRequest) {
     let projectId: number;
     if (body.id) {
       await conn.execute(
-        "INSERT INTO projects (id, name, goal, description, start_date, deadline, priority, responsible, plan_item_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [body.id, body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null]
+        "INSERT INTO projects (id, name, goal, description, start_date, deadline, priority, responsible, plan_item_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [body.id, body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null, body.cancelled ? 1 : 0]
       );
       projectId = body.id;
     } else {
       const [projectResult] = await conn.execute(
-        "INSERT INTO projects (name, goal, description, start_date, deadline, priority, responsible, plan_item_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null]
+        "INSERT INTO projects (name, goal, description, start_date, deadline, priority, responsible, plan_item_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [body.name, body.goal, body.description, body.startDate || null, body.deadline, body.priority, body.responsible || null, body.planItemId ?? null, body.cancelled ? 1 : 0]
       );
       projectId = (projectResult as any).insertId;
     }
@@ -102,14 +105,14 @@ export async function POST(request: NextRequest) {
       let stageId: number;
       if (stage.id) {
         await conn.execute(
-          "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId]
+          "INSERT INTO stages (id, name, result, description, start_date, deadline, project_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [stage.id, stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stage.cancelled ? 1 : 0]
         );
         stageId = stage.id;
       } else {
         const [stageResult] = await conn.execute(
-          "INSERT INTO stages (name, result, description, start_date, deadline, project_id) VALUES (?, ?, ?, ?, ?, ?)",
-          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId]
+          "INSERT INTO stages (name, result, description, start_date, deadline, project_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [stage.name, stage.result, stage.description, stage.startDate || null, stage.deadline, projectId, stage.cancelled ? 1 : 0]
         );
         stageId = (stageResult as any).insertId;
       }
@@ -120,14 +123,14 @@ export async function POST(request: NextRequest) {
         let taskId: number;
         if (task.id) {
           await conn.execute(
-            "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+            "INSERT INTO project_tasks (id, name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [task.id, task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.cancelled ? 1 : 0]
           );
           taskId = task.id;
         } else {
           const [taskResult] = await conn.execute(
-            "INSERT INTO project_tasks (name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId]
+            "INSERT INTO project_tasks (name, description, assignee, start_date, deadline, due_time, duration, status, stage_id, project_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [task.name, task.description, task.assignee, task.startDate || null, task.deadline, task.dueTime ?? null, task.duration ?? null, task.status, stageId, projectId, task.cancelled ? 1 : 0]
           );
           taskId = (taskResult as any).insertId;
         }
@@ -173,6 +176,7 @@ export async function POST(request: NextRequest) {
       priority: body.priority,
       responsible: body.responsible || null,
       planItemId: body.planItemId ?? null,
+      cancelled: !!body.cancelled,
       stages,
     };
 

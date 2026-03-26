@@ -68,18 +68,20 @@ export default function CompactProjectCard({
   const deadlineDate = new Date(project.deadline + "T00:00:00");
   const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  const allTasks = project.stages.flatMap((s) => s.tasks);
+  const isCancelled = !!project.cancelled;
+  const activeStages = project.stages.filter((s) => !s.cancelled);
+  const allTasks = activeStages.flatMap((s) => s.tasks.filter((t) => !t.cancelled));
   const doneTasks = allTasks.filter((t) => t.status === "done").length;
   const inProgressTasks = allTasks.filter((t) => t.status === "in_progress").length;
-  const isCompleted = allTasks.length > 0 && doneTasks === allTasks.length;
-  const isOverdue = !isCompleted && daysLeft < 0;
+  const isCompleted = !isCancelled && allTasks.length > 0 && doneTasks === allTasks.length;
+  const isOverdue = !isCancelled && !isCompleted && daysLeft < 0;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`rounded-lg border overflow-hidden group hover:shadow-sm transition-shadow ${
-        isCompleted ? "bg-green-50 border-green-300" : isOverdue ? "bg-red-50 border-red-300" : "bg-white border-gray-200"
+        isCancelled ? "bg-gray-100 border-gray-300 opacity-60" : isCompleted ? "bg-green-50 border-green-300" : isOverdue ? "bg-red-50 border-red-300" : "bg-white border-gray-200"
       }`}
     >
       {/* Main row */}
@@ -131,7 +133,7 @@ export default function CompactProjectCard({
             <circle
               cx="18" cy="18" r="15"
               fill="none"
-              stroke="#6366f1"
+              stroke={isCancelled ? "#9ca3af" : "#6366f1"}
               strokeWidth="3"
               strokeDasharray={`${completion * 0.942} 100`}
               strokeLinecap="round"
@@ -146,7 +148,7 @@ export default function CompactProjectCard({
         <div className="flex-1 min-w-0">
           <Link
             href={`/projects/${project.id}`}
-            className="text-xs font-semibold text-gray-800 hover:text-indigo-600 transition-colors truncate block"
+            className={`text-xs font-semibold transition-colors truncate block ${isCancelled ? "text-gray-400 line-through" : "text-gray-800 hover:text-indigo-600"}`}
           >
             {project.name}
           </Link>
@@ -166,13 +168,13 @@ export default function CompactProjectCard({
             </span>
           )}
           <div className="text-right">
-            <div className={`text-xs font-bold ${isCompleted ? "text-green-600" : isOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-600"}`}>
+            <div className={`text-xs font-bold ${isCancelled ? "text-gray-400" : isCompleted ? "text-green-600" : isOverdue ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-600"}`}>
               {deadlineLabel}
             </div>
             <div className={`text-[10px] font-semibold ${
-              isCompleted ? "text-green-500" : isOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"
+              isCancelled ? "text-gray-400" : isCompleted ? "text-green-500" : isOverdue ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"
             }`}>
-              {isCompleted ? "Выполнен" : isOverdue ? "просрочен" : `${daysLeft} дн.`}
+              {isCancelled ? "Отменён" : isCompleted ? "Выполнен" : isOverdue ? "просрочен" : `${daysLeft} дн.`}
             </div>
           </div>
         </div>
@@ -249,8 +251,10 @@ function StageInlineBlock({
   onAddTask?: (projectId: number, stageId: number) => void;
 }) {
   const [stageExpanded, setStageExpanded] = useState(false);
-  const doneTasks = stage.tasks.filter((t) => t.status === "done").length;
-  const totalTasks = stage.tasks.length;
+  const isStageCancelled = !!stage.cancelled;
+  const activeTasks = stage.tasks.filter((t) => !t.cancelled);
+  const doneTasks = activeTasks.filter((t) => t.status === "done").length;
+  const totalTasks = activeTasks.length;
 
   const {
     attributes: stageAttributes,
@@ -274,13 +278,13 @@ function StageInlineBlock({
   const now = new Date();
   const daysLeft = Math.ceil((new Date(stage.deadline + "T00:00:00").getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
-  const stageCompleted = totalTasks > 0 && doneTasks === totalTasks;
+  const stageCompleted = !isStageCancelled && totalTasks > 0 && doneTasks === totalTasks;
 
   return (
     <div
       ref={stageNodeRef}
       style={stageStyle}
-      className={`rounded-lg border overflow-hidden ${stageCompleted ? "border-green-300 bg-green-50" : "border-gray-200 bg-white"}`}
+      className={`rounded-lg border overflow-hidden ${isStageCancelled ? "border-gray-300 bg-gray-100 opacity-60" : stageCompleted ? "border-green-300 bg-green-50" : "border-gray-200 bg-white"}`}
     >
       {/* Stage header */}
       <div
@@ -316,16 +320,16 @@ function StageInlineBlock({
           </svg>
         )}
         <div className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
-        <span className="text-[11px] font-semibold text-gray-700 flex-1 truncate">{stage.name}</span>
+        <span className={`text-[11px] font-semibold flex-1 truncate ${isStageCancelled ? "text-gray-400 line-through" : "text-gray-700"}`}>{stage.name}</span>
         <span className="text-[10px] text-gray-400">{doneTasks}/{totalTasks}</span>
         <div className="text-right flex-shrink-0">
-          <span className={`text-[11px] font-bold ${stageCompleted ? "text-green-600" : daysLeft < 0 ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-600"}`}>
+          <span className={`text-[11px] font-bold ${isStageCancelled ? "text-gray-400" : stageCompleted ? "text-green-600" : daysLeft < 0 ? "text-red-600" : daysLeft <= 3 ? "text-amber-600" : "text-gray-600"}`}>
             {deadlineLabel}
           </span>
           <span className={`text-[10px] font-semibold ml-1 ${
-            stageCompleted ? "text-green-500" : daysLeft < 0 ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"
+            isStageCancelled ? "text-gray-400" : stageCompleted ? "text-green-500" : daysLeft < 0 ? "text-red-500" : daysLeft <= 3 ? "text-amber-500" : "text-gray-400"
           }`}>
-            {stageCompleted ? "✓" : daysLeft < 0 ? "!" : `${daysLeft}д`}
+            {isStageCancelled ? "✗" : stageCompleted ? "✓" : daysLeft < 0 ? "!" : `${daysLeft}д`}
           </span>
         </div>
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
@@ -359,8 +363,8 @@ function StageInlineBlock({
               className="flex items-center gap-2 px-3 py-1 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 transition-colors group/task cursor-pointer"
               onClick={() => onEditTask?.(projectId, stage.id, task)}
             >
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${TASK_STATUS_COLORS[task.status] || "bg-gray-200"}`} />
-              <span className={`text-[11px] flex-1 truncate ${task.status === "done" ? "text-gray-400 line-through" : "text-gray-700"}`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${task.cancelled ? "bg-gray-300" : TASK_STATUS_COLORS[task.status] || "bg-gray-200"}`} />
+              <span className={`text-[11px] flex-1 truncate ${task.cancelled ? "text-gray-400 line-through" : task.status === "done" ? "text-gray-400 line-through" : "text-gray-700"}`}>
                 {task.name}
               </span>
               {task.assignee && (

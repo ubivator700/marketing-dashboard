@@ -27,6 +27,7 @@ async function fetchPlan(planId: number) {
     color: i.color,
     sortOrder: i.sort_order,
     planId: i.plan_id,
+    cancelled: !!i.cancelled,
   }));
 
   return {
@@ -35,6 +36,7 @@ async function fetchPlan(planId: number) {
     startDate: formatDate(p.start_date),
     deadline: formatDate(p.deadline),
     sortOrder: p.sort_order,
+    cancelled: !!p.cancelled,
     items,
   };
 }
@@ -77,8 +79,8 @@ export async function PUT(
 
     // 1. Update plan metadata
     await conn.execute(
-      "UPDATE plans SET name=?, start_date=?, deadline=?, sort_order=? WHERE id=?",
-      [body.name, body.startDate || null, body.deadline, body.sortOrder ?? 0, planId]
+      "UPDATE plans SET name=?, start_date=?, deadline=?, sort_order=?, cancelled=? WHERE id=?",
+      [body.name, body.startDate || null, body.deadline, body.sortOrder ?? 0, body.cancelled ? 1 : 0, planId]
     );
 
     // 2. Get existing item IDs
@@ -108,20 +110,20 @@ export async function PUT(
       if (item.id && existingItemIds.has(item.id)) {
         // Update existing
         await conn.execute(
-          "UPDATE plan_items SET name=?, result=?, start_date=?, deadline=?, responsible=?, color=?, sort_order=? WHERE id=? AND plan_id=?",
-          [item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, item.id, planId]
+          "UPDATE plan_items SET name=?, result=?, start_date=?, deadline=?, responsible=?, color=?, sort_order=?, cancelled=? WHERE id=? AND plan_id=?",
+          [item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, item.cancelled ? 1 : 0, item.id, planId]
         );
       } else if (item.id) {
         // Insert with client-provided ID
         await conn.execute(
-          "INSERT INTO plan_items (id, name, result, start_date, deadline, responsible, color, sort_order, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          [item.id, item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId]
+          "INSERT INTO plan_items (id, name, result, start_date, deadline, responsible, color, sort_order, plan_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [item.id, item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId, item.cancelled ? 1 : 0]
         );
       } else {
         // Insert with auto-increment
         await conn.execute(
-          "INSERT INTO plan_items (name, result, start_date, deadline, responsible, color, sort_order, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId]
+          "INSERT INTO plan_items (name, result, start_date, deadline, responsible, color, sort_order, plan_id, cancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [item.name, item.result ?? "", item.startDate || null, item.deadline, item.responsible ?? "", item.color ?? "blue", item.sortOrder ?? 0, planId, item.cancelled ? 1 : 0]
         );
       }
     }

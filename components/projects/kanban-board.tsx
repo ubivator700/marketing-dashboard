@@ -43,9 +43,12 @@ export default function KanbanBoard({ projects, employees, onToggleTaskStatus }:
     }[] = [];
 
     for (const project of projects) {
+      if (project.cancelled) continue;
       if (filterProjectId !== null && project.id !== filterProjectId) continue;
       for (const stage of project.stages) {
+        if (stage.cancelled) continue;
         for (const task of stage.tasks) {
+          if (task.cancelled) continue;
           if (filterAssignee && task.assignee !== filterAssignee) continue;
           if (filterToday && task.deadline !== todayStr) continue;
           result.push({
