@@ -987,6 +987,7 @@ export default function ProjectsDashboard() {
             plans={plans}
             recurringTasks={recurringTasks}
             channels={channels}
+            employees={employees}
             onSave={handleStandaloneTaskSave}
             onDelete={handleStandaloneTaskDelete}
             onUpdateProjectTaskStatus={handleUpdateProjectTaskStatus}

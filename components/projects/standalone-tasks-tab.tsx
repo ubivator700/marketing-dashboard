@@ -45,6 +45,7 @@ interface StandaloneTasksTabProps {
   plans: Plan[];
   recurringTasks: RecurringTask[];
   channels: Channel[];
+  employees?: { name: string }[];
   onSave: (task: StandaloneTask) => void;
   onDelete: (taskId: number) => void;
   onUpdateProjectTaskStatus?: (
@@ -91,6 +92,7 @@ export default function StandaloneTasksTab({
   plans,
   recurringTasks,
   channels,
+  employees,
   onSave,
   onDelete,
   onUpdateProjectTaskStatus,
@@ -98,6 +100,7 @@ export default function StandaloneTasksTab({
 }: StandaloneTasksTabProps) {
   const [editingTask, setEditingTask] = useState<StandaloneTask | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
 
   const today = todayKey();
 
@@ -176,8 +179,13 @@ export default function StandaloneTasksTab({
       }
     }
 
+    // Apply assignee filter
+    const filtered = filterAssignee
+      ? result.filter((r) => r.assignee === filterAssignee)
+      : result;
+
     // Sort: in_progress first, then todo, then recurring, then done
-    result.sort((a, b) => {
+    filtered.sort((a, b) => {
       const oa = STATUS_ORDER[a.status] ?? 9;
       const ob = STATUS_ORDER[b.status] ?? 9;
       if (oa !== ob) return oa - ob;
@@ -187,8 +195,34 @@ export default function StandaloneTasksTab({
       return ta.localeCompare(tb);
     });
 
-    return result;
-  }, [projects, tasks, recurringTasks, today, planItemMap]);
+    return filtered;
+  }, [projects, tasks, recurringTasks, today, planItemMap, filterAssignee]);
+
+  // All unique assignees for the filter
+  const allAssignees = useMemo(() => {
+    const set = new Set<string>();
+    // From employees prop (primary source)
+    if (employees) {
+      for (const emp of employees) {
+        set.add(emp.name);
+      }
+    }
+    // Also add names from today's tasks in case some aren't in employees list
+    for (const project of projects) {
+      for (const stage of project.stages) {
+        for (const task of stage.tasks) {
+          if (task.deadline === today && task.assignee) set.add(task.assignee);
+        }
+      }
+    }
+    for (const task of tasks) {
+      if (task.deadline === today && task.assignee) set.add(task.assignee);
+    }
+    for (const rt of recurringTasks) {
+      if (rt.assignee) set.add(rt.assignee);
+    }
+    return [...set].sort();
+  }, [employees, projects, tasks, recurringTasks, today]);
 
   // Stats
   const counts = useMemo(() => {
@@ -242,12 +276,28 @@ export default function StandaloneTasksTab({
           <h2 className="text-lg font-bold text-gray-900">Задачи на сегодня</h2>
           <p className="text-sm text-gray-500 mt-0.5 capitalize">{todayLabel}</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-        >
-          + Новая задача
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Employee filter */}
+          <div className="flex items-center gap-1.5">
+            <label className="text-xs text-gray-500 font-medium whitespace-nowrap">Сотрудник:</label>
+            <select
+              value={filterAssignee ?? "__all__"}
+              onChange={(e) => setFilterAssignee(e.target.value === "__all__" ? null : e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 max-w-[180px]"
+            >
+              <option value="__all__">Все сотрудники</option>
+              {allAssignees.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+          >
+            + Новая задача
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
