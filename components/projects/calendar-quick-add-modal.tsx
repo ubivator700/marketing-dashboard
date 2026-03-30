@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { StandaloneTask, Channel } from "@/types/dashboard";
+import type { StandaloneTask, Channel, Employee } from "@/types/dashboard";
 import type { AuthUser } from "@/lib/auth-context";
-import { teamMembers } from "@/lib/data";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 interface CalendarQuickAddModalProps {
   defaultDate: string; // "YYYY-MM-DD"
   defaultTime?: string; // "HH:MM"
   channels: Channel[];
+  employees: Employee[];
   currentUser: AuthUser | null;
   onSave: (task: StandaloneTask) => void;
   onClose: () => void;
@@ -19,12 +19,13 @@ export default function CalendarQuickAddModal({
   defaultDate,
   defaultTime,
   channels,
+  employees,
   currentUser,
   onSave,
   onClose,
 }: CalendarQuickAddModalProps) {
   const [name, setName] = useState("");
-  const [assignee, setAssignee] = useState(currentUser?.employeeName ?? teamMembers[0]?.name ?? "");
+  const [assignee, setAssignee] = useState(currentUser?.employeeName ?? employees[0]?.name ?? "");
   const [deadline, setDeadline] = useState(defaultDate);
   const [dueTime, setDueTime] = useState(defaultTime ?? "");
   const [duration, setDuration] = useState("60");
@@ -96,7 +97,7 @@ export default function CalendarQuickAddModal({
               onChange={(e) => setAssignee(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
-              {teamMembers.map((m) => (
+              {employees.map((m) => (
                 <option key={m.name} value={m.name}>
                   {m.name}
                 </option>

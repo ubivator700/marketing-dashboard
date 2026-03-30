@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { ProjectTask, ProjectTaskStatus } from "@/types/dashboard";
+import type { ProjectTask, ProjectTaskStatus, Employee } from "@/types/dashboard";
 import { projectTaskStatusLabels } from "@/lib/projects-data";
-import { teamMembers } from "@/lib/data";
 import { useAuth } from "@/lib/auth-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
@@ -12,6 +11,7 @@ interface ProjectTaskEditModalProps {
   projectId: number;
   stageId: number;
   stageName: string;
+  employees: Employee[];
   onSave: (task: ProjectTask) => void;
   onDelete?: (taskId: number) => void;
   onClose: () => void;
@@ -36,6 +36,7 @@ export default function ProjectTaskEditModal({
   projectId,
   stageId,
   stageName,
+  employees,
   onSave,
   onDelete,
   onClose,
@@ -45,7 +46,7 @@ export default function ProjectTaskEditModal({
   const isAdmin = user?.role === "admin";
   const [name, setName] = useState(task?.name ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
-  const [assignee, setAssignee] = useState(task?.assignee ?? teamMembers[0]?.name ?? "");
+  const [assignee, setAssignee] = useState(task?.assignee ?? employees[0]?.name ?? "");
   const [startDate, setStartDate] = useState(task?.startDate ?? "");
   const [deadline, setDeadline] = useState(task?.deadline ?? "");
   const [status, setStatus] = useState<ProjectTaskStatus>(task?.status ?? "todo");
@@ -102,7 +103,7 @@ export default function ProjectTaskEditModal({
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Исполнитель</label>
             <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={selectClass}>
-              {teamMembers.map((m) => (
+              {employees.map((m) => (
                 <option key={m.name} value={m.name}>{m.name}</option>
               ))}
             </select>

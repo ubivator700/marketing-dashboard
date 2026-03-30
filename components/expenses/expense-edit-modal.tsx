@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import type { Expense } from "@/types/dashboard";
-import { teamMembers } from "@/lib/data";
 import { useAppContext } from "@/lib/app-context";
 import ModalShell from "@/components/dashboard/modal-shell";
 
@@ -19,12 +18,12 @@ export default function ExpenseEditModal({
   onDelete,
   onClose,
 }: ExpenseEditModalProps) {
-  const { projects, channels, stores, selectedStoreId } = useAppContext();
+  const { projects, channels, stores, selectedStoreId, employees } = useAppContext();
   const isCreate = expense === null;
 
   const [name, setName] = useState(expense?.name ?? "");
   const [amount, setAmount] = useState(expense?.amount ?? 0);
-  const [responsible, setResponsible] = useState(expense?.responsible ?? teamMembers[0]?.name ?? "");
+  const [responsible, setResponsible] = useState(expense?.responsible ?? employees[0]?.name ?? "");
   const [projectId, setProjectId] = useState<number | null>(expense?.projectId ?? null);
   const [date, setDate] = useState(expense?.date ?? new Date().toISOString().slice(0, 10));
   const [channelId, setChannelId] = useState<number | null>(expense?.channelId ?? null);
@@ -77,7 +76,7 @@ export default function ExpenseEditModal({
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Ответственный</label>
             <select value={responsible} onChange={(e) => setResponsible(e.target.value)} className={selectClass}>
-              {teamMembers.map((m) => (
+              {employees.map((m) => (
                 <option key={m.name} value={m.name}>{m.name}</option>
               ))}
             </select>

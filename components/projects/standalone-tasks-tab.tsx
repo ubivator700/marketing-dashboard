@@ -12,7 +12,6 @@ import type {
 } from "@/types/dashboard";
 import { projectTaskStatusLabels, projectTaskStatusColors } from "@/lib/projects-data";
 import { generateInstances } from "@/lib/recurring-utils";
-import { teamMembers } from "@/lib/data";
 import ModalShell from "@/components/dashboard/modal-shell";
 
 // ─── Unified row shown in the table ────────────────────────────────
@@ -435,6 +434,7 @@ export default function StandaloneTasksTab({
         <StandaloneTaskModal
           task={editingTask}
           channels={channels}
+          employees={employees ?? []}
           onSave={handleModalSave}
           onDelete={handleModalDelete}
           onClose={() => setEditingTask(null)}
@@ -446,6 +446,7 @@ export default function StandaloneTasksTab({
         <StandaloneTaskModal
           task={null}
           channels={channels}
+          employees={employees ?? []}
           onSave={handleModalSave}
           onDelete={() => {}}
           onClose={() => setShowCreateModal(false)}
@@ -462,6 +463,7 @@ export default function StandaloneTasksTab({
 interface StandaloneTaskModalProps {
   task: StandaloneTask | null;
   channels: Channel[];
+  employees: { name: string }[];
   onSave: (task: StandaloneTask) => void;
   onDelete: (taskId: number) => void;
   onClose: () => void;
@@ -472,6 +474,7 @@ const statusOptions: StandaloneTaskStatus[] = ["todo", "in_progress", "done"];
 export function StandaloneTaskModal({
   task,
   channels,
+  employees,
   onSave,
   onDelete,
   onClose,
@@ -479,7 +482,7 @@ export function StandaloneTaskModal({
   const isCreate = task === null;
   const [name, setName] = useState(task?.name ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
-  const [assignee, setAssignee] = useState(task?.assignee ?? teamMembers[0]?.name ?? "");
+  const [assignee, setAssignee] = useState(task?.assignee ?? employees[0]?.name ?? "");
   const [status, setStatus] = useState<StandaloneTaskStatus>(task?.status ?? "todo");
   const [deadline, setDeadline] = useState(task?.deadline ?? todayKey());
   const [dueTime, setDueTime] = useState(task?.dueTime ?? "");
@@ -557,7 +560,7 @@ export function StandaloneTaskModal({
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Исполнитель</label>
             <select value={assignee} onChange={(e) => setAssignee(e.target.value)} className={selectClass}>
-              {teamMembers.map((m) => (
+              {employees.map((m) => (
                 <option key={m.name} value={m.name}>
                   {m.name}
                 </option>

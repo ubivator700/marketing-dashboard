@@ -1922,6 +1922,7 @@ export default function ProjectsCalendarTab({
           defaultDate={quickAddState.date}
           defaultTime={quickAddState.time}
           channels={channels}
+          employees={employees}
           currentUser={currentUser}
           onSave={onCreateStandaloneTask}
           onClose={() => setQuickAddState(null)}

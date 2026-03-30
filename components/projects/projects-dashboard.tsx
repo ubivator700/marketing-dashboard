@@ -1085,6 +1085,7 @@ export default function ProjectsDashboard() {
           projectId={taskModal.projectId}
           stageId={taskModal.stageId}
           stageName={taskModal.stageName}
+          employees={employees}
           onSave={handleTaskSave}
           onDelete={
             taskModal.task
@@ -1099,6 +1100,7 @@ export default function ProjectsDashboard() {
         <StandaloneTaskModal
           task={standaloneEditTask}
           channels={channels}
+          employees={employees}
           onSave={(task) => {
             handleStandaloneTaskSave(task);
             setStandaloneEditTask(null);

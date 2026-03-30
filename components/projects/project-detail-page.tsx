@@ -25,7 +25,7 @@ interface ProjectDetailPageProps {
 }
 
 export default function ProjectDetailPage({ projectId }: ProjectDetailPageProps) {
-  const { projects, setProjects, expenses } = useAppContext();
+  const { projects, setProjects, expenses, employees } = useAppContext();
 
   const project = projects.find((p) => p.id === projectId);
 
@@ -386,6 +386,7 @@ export default function ProjectDetailPage({ projectId }: ProjectDetailPageProps)
           projectId={taskModal.projectId}
           stageId={taskModal.stageId}
           stageName={taskModal.stageName}
+          employees={employees}
           onSave={handleTaskSave}
           onDelete={
             taskModal.task
