@@ -10,7 +10,11 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import type { Project, Expense, Channel, Lead, Department, Employee, StandaloneTask, RecurringTask, Store, ProductType, Plan, DesignOrder } from "@/types/dashboard";
+import type {
+  Project, Expense, Channel, Lead, Department, Employee,
+  StandaloneTask, RecurringTask, Store, ProductType, Plan, DesignOrder,
+  Salary, AdvanceRequest, ExpenseRequest, ContentProject,
+} from "@/types/dashboard";
 import { useAuth } from "@/lib/auth-context";
 
 // ─── Context interface (unchanged — all components stay compatible) ──
@@ -53,6 +57,19 @@ interface AppContextValue {
   setPlans: React.Dispatch<React.SetStateAction<Plan[]>>;
   designOrders: DesignOrder[];
   setDesignOrders: React.Dispatch<React.SetStateAction<DesignOrder[]>>;
+  // Salaries / advance requests / expense requests / content projects
+  salaries: Salary[];
+  setSalaries: React.Dispatch<React.SetStateAction<Salary[]>>;
+  advanceRequests: AdvanceRequest[];
+  setAdvanceRequests: React.Dispatch<React.SetStateAction<AdvanceRequest[]>>;
+  expenseRequests: ExpenseRequest[];
+  setExpenseRequests: React.Dispatch<React.SetStateAction<ExpenseRequest[]>>;
+  contentProjects: ContentProject[];
+  setContentProjects: React.Dispatch<React.SetStateAction<ContentProject[]>>;
+  /** Принудительная перезагрузка списков заявок (после approval) */
+  reloadRequests: () => Promise<void>;
+  /** Принудительная перезагрузка контент-планов (после CRUD ролика/аплоада) */
+  reloadContentProjects: () => Promise<void>;
   filteredLeads: Lead[];
   filteredExpenses: Expense[];
 }
@@ -251,6 +268,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedProductTypeId, setSelectedProductTypeId] = useState<number | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [designOrders, setDesignOrders] = useState<DesignOrder[]>([]);
+  const [salaries, setSalaries] = useState<Salary[]>([]);
+  const [advanceRequests, setAdvanceRequests] = useState<AdvanceRequest[]>([]);
+  const [expenseRequests, setExpenseRequests] = useState<ExpenseRequest[]>([]);
+  const [contentProjects, setContentProjects] = useState<ContentProject[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   // Refs for previous values (used to compute diffs in sync effects)
@@ -289,7 +310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      const [proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes, plns, dorders] = await Promise.all([
+      const [proj, exp, ch, ld, settings, deps, emps, stasks, rtasks, strs, ptypes, plns, dorders, sals, advReqs, expReqs, cps] = await Promise.all([
         loadJSON<Project[]>("/api/projects", []),
         loadJSON<Expense[]>("/api/expenses", []),
         loadJSON<Channel[]>("/api/channels", []),
@@ -303,6 +324,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loadJSON<ProductType[]>("/api/product-types", []),
         loadJSON<Plan[]>("/api/plans", []),
         loadJSON<DesignOrder[]>("/api/design-orders", []),
+        loadJSON<Salary[]>("/api/salaries", []),
+        loadJSON<AdvanceRequest[]>("/api/advance-requests", []),
+        loadJSON<ExpenseRequest[]>("/api/expense-requests", []),
+        loadJSON<ContentProject[]>("/api/content-projects", []),
       ]);
 
       if (cancelled) return;
@@ -323,6 +348,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setProductTypes(ptypes);
       setPlans(plns);
       setDesignOrders(dorders);
+      setSalaries(sals);
+      setAdvanceRequests(advReqs);
+      setExpenseRequests(expReqs);
+      setContentProjects(cps);
 
       prevProjects.current = proj;
       prevExpenses.current = exp;
@@ -455,6 +484,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (prev !== plans) syncArray("/api/plans", prev, plans);
   }, [plans, dataLoaded]);
 
+  // ─── Manual reloaders for non-syncArray endpoints ──
+  const reloadRequests = useCallback(async () => {
+    const [advReqs, expReqs] = await Promise.all([
+      loadJSON<AdvanceRequest[]>("/api/advance-requests", []),
+      loadJSON<ExpenseRequest[]>("/api/expense-requests", []),
+    ]);
+    setAdvanceRequests(advReqs);
+    setExpenseRequests(expReqs);
+  }, [loadJSON]);
+
+  const reloadContentProjects = useCallback(async () => {
+    const cps = await loadJSON<ContentProject[]>("/api/content-projects", []);
+    setContentProjects(cps);
+  }, [loadJSON]);
+
   // ─── Filtered leads/expenses by selectedStoreId + selectedProductTypeId ──
   const filteredLeads = useMemo(() => {
     let result = leads;
@@ -516,6 +560,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         taxCoefficient, setTaxCoefficient,
         plans, setPlans,
         designOrders, setDesignOrders,
+        salaries, setSalaries,
+        advanceRequests, setAdvanceRequests,
+        expenseRequests, setExpenseRequests,
+        contentProjects, setContentProjects,
+        reloadRequests,
+        reloadContentProjects,
         filteredLeads,
         filteredExpenses,
       }}

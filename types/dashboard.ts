@@ -105,6 +105,9 @@ export interface ProjectTask {
   stageId: number;
   projectId: number;
   cancelled?: boolean;
+  // Поля для бейджа задач из контент-плана (заполняются API при kind='content'):
+  contentReelName?: string;
+  contentProjectName?: string;
 }
 
 export interface Stage {
@@ -120,6 +123,8 @@ export interface Stage {
   tasks: ProjectTask[];
 }
 
+export type ProjectKind = "regular" | "content";
+
 export interface Project {
   id: number;
   name: string;
@@ -131,6 +136,9 @@ export interface Project {
   responsible?: string;
   planItemId: number | null;
   cancelled?: boolean;
+  kind?: ProjectKind;            // 'content' для теневых проектов контент-плана
+  contentReelName?: string;      // имя ролика (для бейджа на задачах) — заполняется бэком
+  contentProjectName?: string;   // имя контент-плана — заполняется бэком
   stages: Stage[];
 }
 
@@ -310,9 +318,104 @@ export interface DesignOrder {
   attachments: DesignOrderAttachment[];
 }
 
+// ─── Salaries & Advance Requests ────────────────────────────────
+
+export interface Salary {
+  id: number;
+  employeeName: string;
+  salary: number;
+  bonus: number;
+  effectiveFrom: string; // YYYY-MM-DD
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export type AdvanceRequestStatus = "pending" | "approved" | "rejected";
+
+export interface AdvanceRequest {
+  id: number;
+  employeeName: string;
+  amount: number;
+  reason: string;
+  status: AdvanceRequestStatus;
+  createdAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  comment: string | null;
+}
+
+// ─── Expense Requests (workflow approval) ───────────────────────
+
+export type ExpenseRequestStatus = "pending" | "approved" | "rejected";
+
+export interface ExpenseRequest {
+  id: number;
+  name: string;
+  amount: number;
+  responsible: string;
+  date: string;
+  projectId: number | null;
+  channelId: number | null;
+  storeId: number | null;
+  status: ExpenseRequestStatus;
+  createdAt: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  comment: string | null;
+  expenseId: number | null;
+}
+
+// ─── Content Plans (контент-планы и ролики) ────────────────────
+
+export type ContentReelStatus = "idea" | "in_progress" | "review" | "published" | "cancelled";
+
+export type ContentReelAttachmentKind = "reference" | "document";
+
+export interface ContentReelAttachment {
+  id: number;
+  reelId: number;
+  fileName: string;
+  filePath: string;
+  fileType: string;
+  fileSize: number;
+  kind: ContentReelAttachmentKind;
+  createdAt: string;
+}
+
+export interface ContentReel {
+  id: number;
+  contentProjectId: number;
+  name: string;
+  description: string;
+  startDate?: string;
+  deadline?: string;
+  priority: number;
+  status: ContentReelStatus;
+  cancelled?: boolean;
+  shadowStageId: number | null;
+  attachments: ContentReelAttachment[];
+  // Задачи ролика лежат в shadow stage; для удобства UI прокидываются ссылкой:
+  taskCount?: number;
+  doneTaskCount?: number;
+}
+
+export interface ContentProject {
+  id: number;
+  name: string;
+  description: string;
+  startDate?: string;
+  deadline: string;
+  responsible?: string;
+  priority: number;
+  cancelled?: boolean;
+  shadowProjectId: number | null;
+  reels: ContentReel[];
+  createdAt?: string;
+}
+
 // ─── Navigation ───────────────────────────────────────────────────
 
-export type PageId = "dashboard" | "projects" | "expenses" | "channels" | "leads" | "organization" | "overview" | "content" | "stores" | "products" | "orders";
+export type PageId = "dashboard" | "projects" | "expenses" | "channels" | "leads" | "organization" | "overview" | "content" | "stores" | "products" | "orders" | "salaries";
 
 export interface PageDefinition {
   id: PageId;

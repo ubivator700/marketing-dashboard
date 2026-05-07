@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession, canWrite, type UserRole } from "@/lib/auth";
+import { getSession, canWrite, isAdmin, type UserRole } from "@/lib/auth";
 
 // ─── Auth check helpers for API routes ────────────────────────────
 
@@ -12,6 +12,13 @@ export async function requireAuth() {
 export function requireWrite(role: UserRole, resource: string) {
   if (!canWrite(role, resource)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  return null;
+}
+
+export function requireAdmin(role: UserRole) {
+  if (!isAdmin(role)) {
+    return NextResponse.json({ error: "Forbidden — admin only" }, { status: 403 });
   }
   return null;
 }

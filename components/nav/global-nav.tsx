@@ -22,17 +22,20 @@ const NAV_ITEMS: NavItem[] = [
     children: [{ label: "Обзор", icon: "📈", href: "/overview" }],
   },
   {
-    label: "Проекты", icon: "📁", href: "/projects",
+    label: "Задачи", icon: "✅", href: "/projects",
     children: [
-      { label: "Контент", icon: "✏️", href: "/content" },
       { label: "Планы", icon: "📋", href: "/plans" },
     ],
+  },
+  {
+    label: "Проекты", icon: "📁", href: "/projects-board",
   },
   {
     label: "Каналы", icon: "📡", href: "/channels",
     children: [{ label: "Лиды", icon: "👥", href: "/leads" }],
   },
   { label: "Расходы", icon: "💰", href: "/expenses" },
+  { label: "Зарплаты", icon: "💼", href: "/salaries" },
   {
     label: "Организация", icon: "🏢", href: "/organization",
     adminOnly: true,

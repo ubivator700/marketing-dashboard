@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type {
   Project,
   ProjectTask,
   ProjectTaskStatus,
   StandaloneTask,
   StandaloneTaskStatus,
+  Channel,
+  Employee,
 } from "@/types/dashboard";
 import {
   projectTaskStatusLabels,
   projectTaskStatusColors,
 } from "@/lib/projects-data";
+import { StandaloneTaskModal } from "./standalone-tasks-tab";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -24,9 +27,11 @@ interface UnifiedTask {
   status: ProjectTaskStatus | StandaloneTaskStatus;
   statusLabel: string;
   statusColor: string;
-  source: "project" | "standalone";
+  source: "project" | "standalone" | "content";
   projectName?: string;
   stageName?: string;
+  contentReelName?: string;
+  contentProjectName?: string;
   // For callbacks
   _projectId?: number;
   _stageId?: number;
@@ -40,6 +45,10 @@ type FilterStatus = "all" | ProjectTaskStatus;
 interface AllTasksTabProps {
   projects: Project[];
   standaloneTasks: StandaloneTask[];
+  channels?: Channel[];
+  employees?: Employee[];
+  defaultFilterAssignee?: string;
+  onCreateStandaloneTask?: (task: StandaloneTask) => void;
   onEditProjectTask?: (projectId: number, stageId: number, task: ProjectTask) => void;
   onEditStandaloneTask?: (task: StandaloneTask) => void;
   onDeleteProjectTask?: (projectId: number, stageId: number, taskId: number) => void;
@@ -99,6 +108,10 @@ function isToday(deadline: string): boolean {
 export default function AllTasksTab({
   projects,
   standaloneTasks,
+  channels = [],
+  employees = [],
+  defaultFilterAssignee,
+  onCreateStandaloneTask,
   onEditProjectTask,
   onEditStandaloneTask,
   onDeleteProjectTask,
@@ -107,18 +120,25 @@ export default function AllTasksTab({
   onUpdateStandaloneTaskStatus,
 }: AllTasksTabProps) {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>("all");
-  const [filterAssignee, setFilterAssignee] = useState<string>("__all__");
+  const [filterAssignee, setFilterAssignee] = useState<string>(defaultFilterAssignee ?? "__all__");
   const [filterProject, setFilterProject] = useState<string>("__all__");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<SortField>("deadline");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [creatingStandalone, setCreatingStandalone] = useState(false);
+
+  // Sync filter when defaultFilterAssignee from parent changes
+  useEffect(() => {
+    if (defaultFilterAssignee !== undefined) setFilterAssignee(defaultFilterAssignee);
+  }, [defaultFilterAssignee]);
 
   // ─── Build unified task list ───
   const allTasks = useMemo(() => {
     const tasks: UnifiedTask[] = [];
 
-    // Project tasks
+    // Project tasks (включая теневые контент-проекты — они имеют kind='content')
     for (const project of projects) {
+      const isContentProject = project.kind === "content";
       for (const stage of project.stages) {
         for (const task of stage.tasks) {
           tasks.push({
@@ -130,9 +150,11 @@ export default function AllTasksTab({
             status: task.status,
             statusLabel: projectTaskStatusLabels[task.status],
             statusColor: projectTaskStatusColors[task.status],
-            source: "project",
-            projectName: project.name,
+            source: isContentProject ? "content" : "project",
+            projectName: isContentProject ? (project.contentProjectName ?? project.name) : project.name,
             stageName: stage.name,
+            contentReelName: task.contentReelName,
+            contentProjectName: task.contentProjectName,
             _projectId: project.id,
             _stageId: stage.id,
             _taskId: task.id,
@@ -204,13 +226,18 @@ export default function AllTasksTab({
       );
     }
 
-    // Sort
+    // Sort — для deadline просроченные всегда вверху, потом сегодняшние, потом по дате
     result = [...result].sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
-        case "deadline":
-          cmp = a.deadline.localeCompare(b.deadline);
+        case "deadline": {
+          // Просроченные → 0, сегодня → 1, остальные → 2 (готовые → 3)
+          const urgencyA = a.status === "done" ? 3 : isOverdue(a.deadline, a.status) ? 0 : isToday(a.deadline) ? 1 : 2;
+          const urgencyB = b.status === "done" ? 3 : isOverdue(b.deadline, b.status) ? 0 : isToday(b.deadline) ? 1 : 2;
+          if (urgencyA !== urgencyB) cmp = urgencyA - urgencyB;
+          else cmp = a.deadline.localeCompare(b.deadline);
           break;
+        }
         case "status":
           cmp = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
           break;
@@ -315,6 +342,18 @@ export default function AllTasksTab({
           <p className="text-xl font-bold text-red-600">{stats.overdue}</p>
         </div>
       </div>
+
+      {/* Action buttons */}
+      {onCreateStandaloneTask && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setCreatingStandalone(true)}
+            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            + Задача
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-100 px-4 py-3 shadow-sm">
@@ -496,8 +535,19 @@ export default function AllTasksTab({
               </div>
 
               {/* Project name (desktop) */}
-              <div className="hidden sm:flex items-center min-w-0">
-                {task.projectName ? (
+              <div className="hidden sm:flex items-center min-w-0 flex-col items-start gap-0.5">
+                {task.source === "content" ? (
+                  <>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-fuchsia-50 text-fuchsia-700 truncate max-w-full" title={task.contentReelName ? `Контент: ${task.contentReelName}` : task.projectName}>
+                      🎬 {task.projectName}
+                    </span>
+                    {task.contentReelName && (
+                      <span className="text-[10px] text-fuchsia-600 truncate max-w-full">
+                        {task.contentReelName}
+                      </span>
+                    )}
+                  </>
+                ) : task.projectName ? (
                   <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 truncate max-w-full">
                     {task.projectName}
                   </span>
@@ -575,6 +625,20 @@ export default function AllTasksTab({
       <div className="text-xs text-gray-400 px-1">
         Показано {filteredTasks.length} из {allTasks.length} задач
       </div>
+
+      {/* Create-standalone modal */}
+      {creatingStandalone && onCreateStandaloneTask && (
+        <StandaloneTaskModal
+          task={null}
+          channels={channels}
+          employees={employees}
+          onSave={(task) => {
+            onCreateStandaloneTask(task);
+            setCreatingStandalone(false);
+          }}
+          onClose={() => setCreatingStandalone(false)}
+        />
+      )}
     </div>
   );
 }

@@ -17,6 +17,25 @@ export async function GET() {
     "SELECT * FROM project_tasks ORDER BY id"
   );
 
+  // ─── Содержимое контент-планов: имя ролика и контент-плана для бейджа ───
+  const [contentReelRows] = await pool.query<RowDataPacket[]>(
+    "SELECT cr.id AS reel_id, cr.name AS reel_name, cr.shadow_stage_id, cp.id AS cp_id, cp.name AS cp_name, cp.shadow_project_id FROM content_reels cr JOIN content_projects cp ON cr.content_project_id = cp.id"
+  );
+  const reelByShadowStage = new Map<number, { reelName: string; cpName: string; cpShadowProjectId: number | null }>();
+  const cpByShadowProject = new Map<number, string>();
+  for (const cr of contentReelRows) {
+    if (cr.shadow_stage_id) {
+      reelByShadowStage.set(cr.shadow_stage_id as number, {
+        reelName: cr.reel_name as string,
+        cpName: cr.cp_name as string,
+        cpShadowProjectId: (cr.shadow_project_id as number) ?? null,
+      });
+    }
+    if (cr.shadow_project_id) {
+      cpByShadowProject.set(cr.shadow_project_id as number, cr.cp_name as string);
+    }
+  }
+
   const tasksByStage = new Map<number, any[]>();
   for (const t of taskRows) {
     const task: Record<string, unknown> = {
@@ -54,19 +73,37 @@ export async function GET() {
     stagesByProject.get(s.project_id)!.push(stage);
   }
 
-  const projects = projectRows.map((p) => ({
-    id: p.id,
-    name: p.name,
-    goal: p.goal,
-    description: p.description,
-    startDate: formatDate(p.start_date),
-    deadline: formatDate(p.deadline),
-    priority: p.priority,
-    responsible: p.responsible,
-    planItemId: p.plan_item_id ?? null,
-    cancelled: !!p.cancelled,
-    stages: stagesByProject.get(p.id) || [],
-  }));
+  const projects = projectRows.map((p) => {
+    const projectKind = (p.kind as string) ?? "regular";
+    const cpName = cpByShadowProject.get(p.id as number);
+    const stages = (stagesByProject.get(p.id) || []).map((s: any) => {
+      const reelInfo = reelByShadowStage.get(s.id);
+      if (reelInfo) {
+        // Помечаем задачи бейджем "Контент: <ролик>"
+        s.tasks = s.tasks.map((t: any) => ({
+          ...t,
+          contentReelName: reelInfo.reelName,
+          contentProjectName: reelInfo.cpName,
+        }));
+      }
+      return s;
+    });
+    return {
+      id: p.id,
+      name: p.name,
+      goal: p.goal,
+      description: p.description,
+      startDate: formatDate(p.start_date),
+      deadline: formatDate(p.deadline),
+      priority: p.priority,
+      responsible: p.responsible,
+      planItemId: p.plan_item_id ?? null,
+      cancelled: !!p.cancelled,
+      kind: projectKind,
+      contentProjectName: cpName ?? null,
+      stages,
+    };
+  });
 
   return NextResponse.json(projects);
 }

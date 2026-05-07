@@ -72,7 +72,7 @@ export function sessionCookieOptions() {
 
 const MANAGER_WRITABLE = new Set([
   "projects", "stages", "project_tasks",
-  "expenses",
+  // "expenses" — admin-only (раньше было разрешено manager)
   "channels", "channel_tasks",
   "leads",
   "settings",
@@ -80,6 +80,14 @@ const MANAGER_WRITABLE = new Set([
   "standalone-tasks",
   "posts",
   "ideas",
+  "content-projects", "content-reels", "content-reel-attachments",
+  "expense-requests", "advance-requests",
+]);
+
+// ─── Admin-only ресурсы (явно перечислены для документации) ─────
+export const ADMIN_ONLY_RESOURCES = new Set([
+  "expenses",
+  "employee-salaries",
 ]);
 
 export function canWrite(role: UserRole, resource: string): boolean {
@@ -89,5 +97,9 @@ export function canWrite(role: UserRole, resource: string): boolean {
 }
 
 export function canManageUsers(role: UserRole): boolean {
+  return role === "admin";
+}
+
+export function isAdmin(role: UserRole): boolean {
   return role === "admin";
 }

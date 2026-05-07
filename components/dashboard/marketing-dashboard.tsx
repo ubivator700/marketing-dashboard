@@ -10,6 +10,7 @@ import { calcProjectCompletion } from "@/lib/project-utils";
 import { statusLabels, statusColors, dayTypeLabels } from "@/lib/data";
 import { generateInstances } from "@/lib/recurring-utils";
 import type { DayType, Employee, Task, StandaloneTask, RecurringTask, DesignOrder } from "@/types/dashboard";
+import AdminApprovalsWidget from "./admin-approvals-widget";
 
 function formatDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -330,6 +331,9 @@ export default function MarketingDashboard() {
           <h1 className="text-2xl font-black text-gray-900 dark:text-white dark:text-white">Дашборд</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 capitalize">{todayLabel}</p>
         </div>
+
+        {/* Admin: pending approvals widget */}
+        {user?.role === "admin" && <AdminApprovalsWidget />}
 
         {/* Tab switcher */}
         <div className="mb-6">

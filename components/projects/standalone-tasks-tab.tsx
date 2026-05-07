@@ -465,7 +465,7 @@ interface StandaloneTaskModalProps {
   channels: Channel[];
   employees: { name: string }[];
   onSave: (task: StandaloneTask) => void;
-  onDelete: (taskId: number) => void;
+  onDelete?: (taskId: number) => void;
   onClose: () => void;
 }
 
@@ -513,7 +513,7 @@ export function StandaloneTaskModal({
   };
 
   const handleDelete = () => {
-    if (task && window.confirm("Удалить задачу?")) {
+    if (task && onDelete && window.confirm("Удалить задачу?")) {
       onDelete(task.id);
     }
   };

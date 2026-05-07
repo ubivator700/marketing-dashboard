@@ -8,6 +8,8 @@ import { totalExpenses as calcTotal, totalExpensesForChannel } from "@/lib/expen
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import ExpenseTable from "./expense-table";
 import ExpenseEditModal from "./expense-edit-modal";
+import ExpenseRequestModal from "./expense-request-modal";
+import ExpenseRequestsBlock from "./expense-requests-block";
 import StoreFilter from "@/components/ui/store-filter";
 
 const PIE_COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ef4444", "#14b8a6", "#f97316", "#84cc16"];
@@ -19,7 +21,10 @@ export default function ExpensesDashboard() {
   } = useAppContext();
   const { user } = useAuth();
   const role = user?.role;
+  const isAdmin = role === "admin";
   const [editing, setEditing] = useState<Expense | null | "create">(null);
+  const [requesting, setRequesting] = useState(false);
+  const [requestsReloadKey, setRequestsReloadKey] = useState(0);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetDraft, setBudgetDraft] = useState<string>("");
   const [importing, setImporting] = useState(false);
@@ -27,6 +32,13 @@ export default function ExpensesDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [channelBreakdownOpen, setChannelBreakdownOpen] = useState(false);
   const [projectBreakdownOpen, setProjectBreakdownOpen] = useState(false);
+  // Filters for expense table
+  const [tableSearch, setTableSearch] = useState("");
+  const [tableProject, setTableProject] = useState<string>("__all__");
+  const [tableChannel, setTableChannel] = useState<string>("__all__");
+  const [tableResponsible, setTableResponsible] = useState<string>("__all__");
+  const [tableDateFrom, setTableDateFrom] = useState("");
+  const [tableDateTo, setTableDateTo] = useState("");
 
   const total = calcTotal(filteredExpenses);
   const grandTotal = total;
@@ -117,6 +129,76 @@ export default function ExpensesDashboard() {
   const monthlyExpenses = useMemo(() => {
     return filteredExpenses.filter((e) => e.date.startsWith(currentMonthPrefix));
   }, [filteredExpenses, currentMonthPrefix]);
+
+  // Last 12 months expenses for bar chart
+  const last12Months = useMemo(() => {
+    const map = new Map<string, number>();
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      map.set(key, 0);
+    }
+    for (const e of filteredExpenses) {
+      const key = e.date.slice(0, 7);
+      if (map.has(key)) map.set(key, (map.get(key) ?? 0) + e.amount);
+    }
+    return Array.from(map.entries()).map(([month, amount]) => {
+      const [y, m] = month.split("-");
+      const monthNames = ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"];
+      return { month, label: `${monthNames[Number(m) - 1]} ${y.slice(2)}`, amount };
+    });
+  }, [filteredExpenses]);
+  const max12 = useMemo(() => Math.max(1, ...last12Months.map((d) => d.amount)), [last12Months]);
+
+  // All responsible names for filter
+  const allResponsibles = useMemo(() => {
+    const set = new Set<string>();
+    for (const e of filteredExpenses) if (e.responsible) set.add(e.responsible);
+    return Array.from(set).sort();
+  }, [filteredExpenses]);
+
+  // Apply table filters
+  const tableFilteredExpenses = useMemo(() => {
+    return filteredExpenses.filter((e) => {
+      if (tableSearch.trim()) {
+        const q = tableSearch.toLowerCase();
+        if (!e.name.toLowerCase().includes(q) && !e.responsible.toLowerCase().includes(q)) return false;
+      }
+      if (tableProject !== "__all__") {
+        if (tableProject === "__none__" && e.projectId !== null) return false;
+        if (tableProject !== "__none__" && String(e.projectId) !== tableProject) return false;
+      }
+      if (tableChannel !== "__all__") {
+        if (tableChannel === "__none__" && e.channelId !== null) return false;
+        if (tableChannel !== "__none__" && String(e.channelId) !== tableChannel) return false;
+      }
+      if (tableResponsible !== "__all__" && e.responsible !== tableResponsible) return false;
+      if (tableDateFrom && e.date < tableDateFrom) return false;
+      if (tableDateTo && e.date > tableDateTo) return false;
+      return true;
+    });
+  }, [filteredExpenses, tableSearch, tableProject, tableChannel, tableResponsible, tableDateFrom, tableDateTo]);
+
+  // Submit expense request (employee only)
+  const handleSubmitRequest = useCallback(async (req: {
+    name: string; amount: number; date: string;
+    projectId: number | null; channelId: number | null; storeId: number | null;
+  }) => {
+    const res = await fetch("/api/expense-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (res.ok) {
+      setRequesting(false);
+      setRequestsReloadKey((v) => v + 1);
+      alert("Заявка отправлена админу на одобрение");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Ошибка отправки заявки");
+    }
+  }, []);
 
   const monthlyTotal = useMemo(() => monthlyExpenses.reduce((s, e) => s + e.amount, 0), [monthlyExpenses]);
 
@@ -484,47 +566,121 @@ export default function ExpensesDashboard() {
           </div>
         )}
 
+        {/* Bar chart за 12 месяцев */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6 p-5">
+          <h2 className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-4">Расходы по месяцам</h2>
+          <div className="flex items-end gap-2 h-40">
+            {last12Months.map((d) => {
+              const h = max12 > 0 ? Math.max(2, Math.round((d.amount / max12) * 100)) : 2;
+              return (
+                <div key={d.month} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                  <div className="text-[10px] text-gray-500 truncate w-full text-center">
+                    {d.amount > 0 ? `${(d.amount / 1000).toFixed(0)}k` : ""}
+                  </div>
+                  <div
+                    className="w-full bg-indigo-500 rounded-t-md transition-all hover:bg-indigo-600"
+                    style={{ height: `${h}%`, minHeight: "2px" }}
+                    title={`${d.label}: ${d.amount.toLocaleString("ru-RU")} ₽`}
+                  />
+                  <div className="text-[10px] text-gray-400 truncate w-full text-center">{d.label}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Заявки на расход */}
+        <ExpenseRequestsBlock
+          isAdmin={isAdmin}
+          projects={projects}
+          channels={channels}
+          stores={stores}
+          reloadKey={requestsReloadKey}
+          onExpenseCreated={(expense) => setExpenses((prev) => [...prev, expense])}
+        />
+
         {/* Action buttons */}
         <div className="flex items-center justify-end gap-2 mb-4">
-          <button
-            onClick={handleDownloadTemplate}
-            className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
-            title="Скачать шаблон Excel"
-          >
-            📥 Шаблон
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors shadow-sm disabled:opacity-50"
-            title="Импорт расходов из Excel"
-          >
-            {importing ? "⏳ Импорт..." : "📤 Импорт Excel"}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleImportFile}
-            className="hidden"
-          />
-          <button
-            onClick={() => setEditing("create")}
-            className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors shadow-sm"
-          >
-            + Новый расход
-          </button>
+          {isAdmin && (
+            <>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+                title="Скачать шаблон Excel"
+              >
+                📥 Шаблон
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors shadow-sm disabled:opacity-50"
+                title="Импорт расходов из Excel"
+              >
+                {importing ? "⏳ Импорт..." : "📤 Импорт Excel"}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleImportFile}
+                className="hidden"
+              />
+              <button
+                onClick={() => setEditing("create")}
+                className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+              >
+                + Новый расход
+              </button>
+            </>
+          )}
+          {!isAdmin && (
+            <button
+              onClick={() => setRequesting(true)}
+              className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors shadow-sm"
+            >
+              + Запросить расход
+            </button>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Поиск..."
+              className="flex-1 min-w-[180px] text-sm border border-gray-200 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-3 py-1.5"
+            />
+            <select value={tableProject} onChange={(e) => setTableProject(e.target.value)} className="text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-2 py-1.5">
+              <option value="__all__">Все проекты</option>
+              <option value="__none__">Без проекта</option>
+              {projects.filter((p) => p.kind !== "content").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <select value={tableChannel} onChange={(e) => setTableChannel(e.target.value)} className="text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-2 py-1.5">
+              <option value="__all__">Все каналы</option>
+              <option value="__none__">Без канала</option>
+              {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <select value={tableResponsible} onChange={(e) => setTableResponsible(e.target.value)} className="text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-2 py-1.5">
+              <option value="__all__">Все ответственные</option>
+              {allResponsibles.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <input type="date" value={tableDateFrom} onChange={(e) => setTableDateFrom(e.target.value)} className="text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-2 py-1.5" title="С даты" />
+            <input type="date" value={tableDateTo} onChange={(e) => setTableDateTo(e.target.value)} className="text-xs border border-gray-200 dark:border-gray-600 dark:bg-gray-700 rounded-lg px-2 py-1.5" title="По дату" />
+          </div>
         </div>
 
         {/* Table */}
         <ExpenseTable
-          expenses={filteredExpenses}
+          expenses={tableFilteredExpenses}
           projects={projects}
           channels={channels}
           stores={stores}
-          total={total}
-          onEdit={(expense) => setEditing(expense)}
-          onDelete={handleDelete}
+          total={tableFilteredExpenses.reduce((s, e) => s + e.amount, 0)}
+          onEdit={(expense) => isAdmin && setEditing(expense)}
+          onDelete={isAdmin ? handleDelete : () => {}}
         />
       </div>
 
@@ -535,6 +691,17 @@ export default function ExpensesDashboard() {
           onSave={handleSave}
           onDelete={editing !== "create" ? handleDelete : undefined}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {/* Request modal — для не-admin */}
+      {requesting && (
+        <ExpenseRequestModal
+          projects={projects}
+          channels={channels}
+          stores={stores}
+          onSubmit={handleSubmitRequest}
+          onClose={() => setRequesting(false)}
         />
       )}
     </div>

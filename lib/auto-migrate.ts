@@ -637,6 +637,148 @@ export async function runAutoMigrate() {
       `);
     }
 
+    // ───────────────────────────────────────────────────────────
+    //  PROJECTS — add kind column for content-plan shadow projects
+    // ───────────────────────────────────────────────────────────
+    await ensureColumn(conn, "projects", "kind", "ENUM('regular','content') NOT NULL DEFAULT 'regular'");
+
+    // ───────────────────────────────────────────────────────────
+    //  EMPLOYEE_SALARIES (история окладов и премий)
+    //  Без FK на employees(name) — чтобы избежать конфликта коллаций
+    //  между старой таблицей employees и новой. Индекс достаточен.
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "employee_salaries"))) {
+      console.log("  [migrate] CREATE TABLE employee_salaries");
+      await conn.query(`
+        CREATE TABLE employee_salaries (
+          id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+          employee_name  VARCHAR(100) NOT NULL,
+          salary         INT          NOT NULL DEFAULT 0,
+          bonus          INT          NOT NULL DEFAULT 0,
+          effective_from DATE         NOT NULL,
+          notes          TEXT         NULL,
+          created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_emp_salary_emp (employee_name, effective_from)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  ADVANCE_REQUESTS (заявки на аванс)
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "advance_requests"))) {
+      console.log("  [migrate] CREATE TABLE advance_requests");
+      await conn.query(`
+        CREATE TABLE advance_requests (
+          id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+          employee_name VARCHAR(100) NOT NULL,
+          amount        INT          NOT NULL,
+          reason        TEXT         NOT NULL,
+          status        ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+          created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          decided_by    VARCHAR(100) NULL,
+          decided_at    DATETIME     NULL,
+          comment       TEXT         NULL,
+          INDEX idx_adv_req_emp (employee_name)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  EXPENSE_REQUESTS (заявки на расходы — workflow approval)
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "expense_requests"))) {
+      console.log("  [migrate] CREATE TABLE expense_requests");
+      await conn.query(`
+        CREATE TABLE expense_requests (
+          id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+          name          VARCHAR(300) NOT NULL,
+          amount        INT          NOT NULL,
+          responsible   VARCHAR(100) NOT NULL,
+          date          DATE         NOT NULL,
+          project_id    BIGINT       NULL,
+          channel_id    BIGINT       NULL,
+          store_id      BIGINT       NULL,
+          status        ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+          created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          decided_by    VARCHAR(100) NULL,
+          decided_at    DATETIME     NULL,
+          comment       TEXT         NULL,
+          expense_id    BIGINT       NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id)  ON DELETE SET NULL,
+          FOREIGN KEY (channel_id) REFERENCES channels(id)  ON DELETE SET NULL,
+          FOREIGN KEY (store_id)   REFERENCES stores(id)    ON DELETE SET NULL,
+          FOREIGN KEY (expense_id) REFERENCES expenses(id)  ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  CONTENT_PROJECTS (контент-планы)
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "content_projects"))) {
+      console.log("  [migrate] CREATE TABLE content_projects");
+      await conn.query(`
+        CREATE TABLE content_projects (
+          id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+          name               VARCHAR(300) NOT NULL,
+          description        TEXT         NULL,
+          start_date         DATE         NULL,
+          deadline           DATE         NOT NULL,
+          responsible        VARCHAR(100) NULL,
+          priority           INT          NOT NULL DEFAULT 0,
+          cancelled          TINYINT(1)   NOT NULL DEFAULT 0,
+          shadow_project_id  BIGINT       NULL,
+          created_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (shadow_project_id) REFERENCES projects(id) ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  CONTENT_REELS (ролики внутри контент-плана)
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "content_reels"))) {
+      console.log("  [migrate] CREATE TABLE content_reels");
+      await conn.query(`
+        CREATE TABLE content_reels (
+          id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+          content_project_id BIGINT       NOT NULL,
+          name               VARCHAR(300) NOT NULL,
+          description        TEXT         NULL,
+          start_date         DATE         NULL,
+          deadline           DATE         NULL,
+          priority           INT          NOT NULL DEFAULT 0,
+          status             ENUM('idea','in_progress','review','published','cancelled') NOT NULL DEFAULT 'idea',
+          cancelled          TINYINT(1)   NOT NULL DEFAULT 0,
+          shadow_stage_id    BIGINT       NULL,
+          created_at         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (content_project_id) REFERENCES content_projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (shadow_stage_id)    REFERENCES stages(id)            ON DELETE SET NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
+    // ───────────────────────────────────────────────────────────
+    //  CONTENT_REEL_ATTACHMENTS (референсы и документы роликов)
+    // ───────────────────────────────────────────────────────────
+    if (!(await tableExists(conn, "content_reel_attachments"))) {
+      console.log("  [migrate] CREATE TABLE content_reel_attachments");
+      await conn.query(`
+        CREATE TABLE content_reel_attachments (
+          id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+          reel_id     BIGINT        NOT NULL,
+          file_name   VARCHAR(500)  NOT NULL,
+          file_path   VARCHAR(1000) NOT NULL,
+          file_type   VARCHAR(100)  NOT NULL,
+          file_size   BIGINT        NOT NULL DEFAULT 0,
+          kind        ENUM('reference','document') NOT NULL DEFAULT 'reference',
+          created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (reel_id) REFERENCES content_reels(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+    }
+
     console.log("[auto-migrate] ✅ Database schema is up to date.");
   } catch (err) {
     console.error("[auto-migrate] ❌ Migration failed:", err);

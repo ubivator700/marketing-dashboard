@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -19,23 +19,36 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
-import type { Project, Employee, ProjectTaskStatus } from "@/types/dashboard";
+import type {
+  Project, Employee, ProjectTaskStatus, ProjectTask,
+  StandaloneTask, StandaloneTaskStatus, Channel,
+} from "@/types/dashboard";
+import { StandaloneTaskModal } from "./standalone-tasks-tab";
 
 /* ─── types ──────────────────────────────────────── */
 
 interface KanbanBoardProps {
   projects: Project[];
+  standaloneTasks?: StandaloneTask[];
   employees: Employee[];
+  channels?: Channel[];
   cancelledProjectIds?: Set<number>;
+  defaultFilterAssignee?: string;
   onToggleTaskStatus?: (
     projectId: number,
     stageId: number,
     taskId: number,
     status: ProjectTaskStatus,
   ) => void;
+  onUpdateStandaloneTaskStatus?: (taskId: number, status: StandaloneTaskStatus) => void;
+  onCreateStandaloneTask?: (task: StandaloneTask) => void;
+  onEditStandaloneTask?: (task: StandaloneTask) => void;
+  onEditProjectTask?: (projectId: number, stageId: number, task: ProjectTask) => void;
 }
 
 type KanbanColumn = "todo" | "in_progress" | "done";
+
+type TaskTypeFilter = "all" | "project" | "standalone" | "content";
 
 interface KanbanTask {
   id: number;
@@ -45,10 +58,12 @@ interface KanbanTask {
   assignee: string;
   deadline: string;
   status: KanbanColumn;
-  projectId: number;
+  taskType: "project" | "standalone" | "content";
+  projectId: number | null;
   projectName: string;
-  stageId: number;
+  stageId: number | null;
   stageName: string;
+  contentReelName?: string;
 }
 
 const COLUMN_CONFIG: {
@@ -95,10 +110,12 @@ function SortableTaskCard({
   task,
   isOverdue,
   daysLeft,
+  onEdit,
 }: {
   task: KanbanTask;
   isOverdue: boolean;
   daysLeft: number;
+  onEdit?: (task: KanbanTask) => void;
 }) {
   const {
     attributes,
@@ -120,10 +137,11 @@ function SortableTaskCard({
       style={style}
       {...attributes}
       {...listeners}
+      onDoubleClick={(e) => { e.stopPropagation(); onEdit?.(task); }}
       className={`bg-white rounded-xl border p-3 shadow-sm select-none transition-all duration-200 ${
         isDragging
           ? "opacity-40 scale-95 shadow-none border-dashed border-gray-300"
-          : "hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98]"
+          : "hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] cursor-grab"
       } ${isOverdue ? "border-red-200 bg-red-50/30" : "border-gray-200"}`}
     >
       <TaskCardContent task={task} isOverdue={isOverdue} daysLeft={daysLeft} />
@@ -148,12 +166,31 @@ function TaskCardContent({
         {task.name}
       </p>
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-[10px] text-indigo-600 font-medium bg-indigo-50 px-1.5 py-0.5 rounded-md">
-          {task.projectName}
-        </span>
-        <span className="text-[10px] text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded-md">
-          {task.stageName}
-        </span>
+        {task.taskType === "content" ? (
+          <>
+            <span className="text-[10px] text-fuchsia-700 font-medium bg-fuchsia-50 px-1.5 py-0.5 rounded-md">
+              🎬 {task.projectName}
+            </span>
+            {task.contentReelName && (
+              <span className="text-[10px] text-fuchsia-500 bg-fuchsia-50/60 px-1.5 py-0.5 rounded-md">
+                {task.contentReelName}
+              </span>
+            )}
+          </>
+        ) : task.taskType === "standalone" ? (
+          <span className="text-[10px] text-teal-600 font-medium bg-teal-50 px-1.5 py-0.5 rounded-md">
+            Текущая задача
+          </span>
+        ) : (
+          <>
+            <span className="text-[10px] text-indigo-600 font-medium bg-indigo-50 px-1.5 py-0.5 rounded-md">
+              {task.projectName}
+            </span>
+            <span className="text-[10px] text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded-md">
+              {task.stageName}
+            </span>
+          </>
+        )}
       </div>
       <div className="flex items-center justify-between mt-2">
         {task.assignee && (
@@ -243,15 +280,32 @@ function DroppableColumn({
 
 export default function KanbanBoard({
   projects,
+  standaloneTasks = [],
   employees,
+  channels = [],
   cancelledProjectIds,
+  defaultFilterAssignee,
   onToggleTaskStatus,
+  onUpdateStandaloneTaskStatus,
+  onCreateStandaloneTask,
+  onEditStandaloneTask,
+  onEditProjectTask,
 }: KanbanBoardProps) {
-  const [filterAssignee, setFilterAssignee] = useState<string | null>(null);
+  const initialAssignee = defaultFilterAssignee && defaultFilterAssignee !== "__all__" ? defaultFilterAssignee : null;
+  const [filterAssignee, setFilterAssignee] = useState<string | null>(initialAssignee);
   const [filterProjectId, setFilterProjectId] = useState<number | null>(null);
+  const [filterTaskType, setFilterTaskType] = useState<TaskTypeFilter>("all");
   const [filterToday, setFilterToday] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
+  const [creatingStandalone, setCreatingStandalone] = useState(false);
+
+  // Sync filter when defaultFilterAssignee changes from parent
+  useEffect(() => {
+    if (defaultFilterAssignee !== undefined) {
+      setFilterAssignee(defaultFilterAssignee === "__all__" ? null : defaultFilterAssignee);
+    }
+  }, [defaultFilterAssignee]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -264,12 +318,16 @@ export default function KanbanBoard({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }, []);
 
-  // Flatten all tasks
+  // Flatten all tasks (project + standalone + content)
   const allTasks = useMemo(() => {
     const result: KanbanTask[] = [];
+    // Project + Content tasks
     for (const project of projects) {
       if (project.cancelled || cancelledProjectIds?.has(project.id)) continue;
       if (filterProjectId !== null && project.id !== filterProjectId) continue;
+      const isContent = project.kind === "content";
+      const taskType: KanbanTask["taskType"] = isContent ? "content" : "project";
+      if (filterTaskType !== "all" && filterTaskType !== taskType) continue;
       for (const stage of project.stages) {
         if (stage.cancelled) continue;
         for (const task of stage.tasks) {
@@ -278,25 +336,51 @@ export default function KanbanBoard({
           if (filterToday && task.deadline !== todayStr) continue;
           result.push({
             id: task.id,
-            uid: `${project.id}-${stage.id}-${task.id}`,
+            uid: `p-${project.id}-${stage.id}-${task.id}`,
             name: task.name,
             description: task.description,
             assignee: task.assignee,
             deadline: task.deadline,
             status: task.status as KanbanColumn,
+            taskType,
             projectId: project.id,
-            projectName: project.name,
+            projectName: isContent ? (project.contentProjectName ?? project.name) : project.name,
             stageId: stage.id,
             stageName: stage.name,
+            contentReelName: task.contentReelName,
           });
         }
+      }
+    }
+    // Standalone tasks
+    if (filterTaskType === "all" || filterTaskType === "standalone") {
+      for (const task of standaloneTasks) {
+        if (filterAssignee && task.assignee !== filterAssignee) continue;
+        if (filterToday && task.deadline !== todayStr) continue;
+        if (filterProjectId !== null) continue; // standalone не привязаны к проекту
+        result.push({
+          id: task.id,
+          uid: `s-${task.id}`,
+          name: task.name,
+          description: task.description,
+          assignee: task.assignee,
+          deadline: task.deadline,
+          status: task.status as KanbanColumn,
+          taskType: "standalone",
+          projectId: null,
+          projectName: "",
+          stageId: null,
+          stageName: "",
+        });
       }
     }
     return result;
   }, [
     projects,
+    standaloneTasks,
     filterAssignee,
     filterProjectId,
+    filterTaskType,
     filterToday,
     todayStr,
     cancelledProjectIds,
@@ -311,8 +395,11 @@ export default function KanbanBoard({
         }
       }
     }
+    for (const t of standaloneTasks) {
+      if (t.assignee) set.add(t.assignee);
+    }
     return [...set].sort();
-  }, [projects]);
+  }, [projects, standaloneTasks]);
 
   const columns = useMemo(() => {
     const map: Record<KanbanColumn, KanbanTask[]> = {
@@ -390,14 +477,34 @@ export default function KanbanBoard({
 
       if (!targetColumn || targetColumn === task.status) return;
 
-      onToggleTaskStatus?.(
-        task.projectId,
-        task.stageId,
-        task.id,
-        targetColumn as ProjectTaskStatus,
-      );
+      if (task.taskType === "standalone") {
+        onUpdateStandaloneTaskStatus?.(task.id, targetColumn as StandaloneTaskStatus);
+      } else if (task.projectId != null && task.stageId != null) {
+        onToggleTaskStatus?.(
+          task.projectId,
+          task.stageId,
+          task.id,
+          targetColumn as ProjectTaskStatus,
+        );
+      }
     },
-    [allTasks, onToggleTaskStatus],
+    [allTasks, onToggleTaskStatus, onUpdateStandaloneTaskStatus],
+  );
+
+  // Edit click handler — открывает модалку редактирования
+  const handleTaskEdit = useCallback(
+    (task: KanbanTask) => {
+      if (task.taskType === "standalone") {
+        const original = standaloneTasks.find((t) => t.id === task.id);
+        if (original) onEditStandaloneTask?.(original);
+      } else if (task.projectId != null && task.stageId != null) {
+        const project = projects.find((p) => p.id === task.projectId);
+        const stage = project?.stages.find((s) => s.id === task.stageId);
+        const original = stage?.tasks.find((t) => t.id === task.id);
+        if (original) onEditProjectTask?.(task.projectId, task.stageId, original);
+      }
+    },
+    [projects, standaloneTasks, onEditStandaloneTask, onEditProjectTask],
   );
 
   const handleDragCancel = useCallback(() => {
@@ -419,6 +526,14 @@ export default function KanbanBoard({
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
+        {onCreateStandaloneTask && (
+          <button
+            onClick={() => setCreatingStandalone(true)}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 text-white border border-indigo-600 hover:bg-indigo-700 shadow-sm"
+          >
+            + Задача
+          </button>
+        )}
         <button
           onClick={() => setFilterToday(!filterToday)}
           className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all duration-200 ${
@@ -429,6 +544,21 @@ export default function KanbanBoard({
         >
           Сегодня
         </button>
+        <div className="flex items-center gap-1.5">
+          <label className="text-xs text-gray-500 font-medium whitespace-nowrap">
+            Тип:
+          </label>
+          <select
+            value={filterTaskType}
+            onChange={(e) => setFilterTaskType(e.target.value as TaskTypeFilter)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+          >
+            <option value="all">Все типы</option>
+            <option value="project">Проектные</option>
+            <option value="standalone">Текущие</option>
+            <option value="content">Контент</option>
+          </select>
+        </div>
         <div className="flex items-center gap-1.5">
           <label className="text-xs text-gray-500 font-medium whitespace-nowrap">
             Сотрудник:
@@ -501,6 +631,7 @@ export default function KanbanBoard({
                       task={task}
                       isOverdue={isOverdue}
                       daysLeft={daysLeft}
+                      onEdit={handleTaskEdit}
                     />
                   );
                 })}
@@ -525,6 +656,16 @@ export default function KanbanBoard({
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {creatingStandalone && onCreateStandaloneTask && (
+        <StandaloneTaskModal
+          task={null}
+          channels={channels}
+          employees={employees}
+          onSave={(t) => { onCreateStandaloneTask(t); setCreatingStandalone(false); }}
+          onClose={() => setCreatingStandalone(false)}
+        />
+      )}
     </div>
   );
 }

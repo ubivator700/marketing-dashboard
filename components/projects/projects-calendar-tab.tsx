@@ -32,6 +32,7 @@ interface ProjectsCalendarTabProps {
   channels: Channel[];
   employees: Employee[];
   currentUser: AuthUser | null;
+  defaultFilterAssignee?: string;
   onUpdateProjectTask?: (
     projectId: number,
     stageId: number,
@@ -43,6 +44,8 @@ interface ProjectsCalendarTabProps {
     updates: { deadline?: string; dueTime?: string; duration?: number }
   ) => void;
   onCreateStandaloneTask?: (task: StandaloneTask) => void;
+  onEditStandaloneTask?: (task: StandaloneTask) => void;
+  onEditProjectTask?: (projectId: number, stageId: number, task: ProjectTask) => void;
   onToggleProjectTaskStatus?: (
     projectId: number,
     stageId: number,
@@ -251,6 +254,8 @@ export default function ProjectsCalendarTab({
   onUpdateProjectTask,
   onUpdateStandaloneTask,
   onCreateStandaloneTask,
+  onEditStandaloneTask,
+  onEditProjectTask,
   onToggleProjectTaskStatus,
   onToggleStandaloneTaskStatus,
   onUpdateStageDates,
@@ -976,21 +981,47 @@ export default function ProjectsCalendarTab({
           {selectedItem.channelName && <p>Канал: {selectedItem.channelName}</p>}
         </div>
 
-        {/* Toggle status button (not for recurring) */}
-        {selectedItem.source !== "recurring" && (onToggleProjectTaskStatus || onToggleStandaloneTaskStatus) && (
-          <button
-            onClick={() => {
-              handleToggleStatus(selectedItem);
-              setSelectedItem(null);
-            }}
-            className={`mt-4 w-full py-2 rounded-lg text-sm font-medium transition-colors ${
-              selectedItem.status === "done"
-                ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                : "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
-            }`}
-          >
-            {selectedItem.status === "done" ? "Вернуть в работу" : "✓ Отметить выполненной"}
-          </button>
+        {/* Action buttons */}
+        {selectedItem.source !== "recurring" && (
+          <div className="mt-4 space-y-2">
+            {/* Edit button */}
+            {(onEditProjectTask || onEditStandaloneTask) && (
+              <button
+                onClick={() => {
+                  if (selectedItem.source === "project" && onEditProjectTask && selectedItem._projectId != null && selectedItem._stageId != null && selectedItem._taskId != null) {
+                    const project = projects.find((p) => p.id === selectedItem._projectId);
+                    const stage = project?.stages.find((s) => s.id === selectedItem._stageId);
+                    const original = stage?.tasks.find((t) => t.id === selectedItem._taskId);
+                    if (original) onEditProjectTask(selectedItem._projectId, selectedItem._stageId, original);
+                  } else if (selectedItem.source === "standalone" && onEditStandaloneTask && selectedItem._taskId != null) {
+                    const original = standaloneTasks.find((t) => t.id === selectedItem._taskId);
+                    if (original) onEditStandaloneTask(original);
+                  }
+                  setSelectedItem(null);
+                }}
+                className="w-full py-2 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
+              >
+                ✏️ Редактировать задачу
+              </button>
+            )}
+
+            {/* Toggle status button */}
+            {(onToggleProjectTaskStatus || onToggleStandaloneTaskStatus) && (
+              <button
+                onClick={() => {
+                  handleToggleStatus(selectedItem);
+                  setSelectedItem(null);
+                }}
+                className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+                  selectedItem.status === "done"
+                    ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    : "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
+                }`}
+              >
+                {selectedItem.status === "done" ? "Вернуть в работу" : "✓ Отметить выполненной"}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
